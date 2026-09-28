@@ -702,6 +702,20 @@ extern volatile u32 kite_test_active;
 #endif
 
 /* ================================================================
+ * FOE flow-stats window published to the Linux host by the
+ * FLOW_STATS_SETUP mailbox call (PPE function 4). The host ioremaps it
+ * and both writes and reads it, so it must be DRAM.
+ *
+ * The values live in link.ld, which also asserts that the firmware image
+ * and the hart stacks never grow into the window. Reading them from the
+ * linker symbols keeps a single source of truth, so the address and the
+ * guard cannot drift apart.
+ * ================================================================ */
+extern char __npu_stats_base[], __npu_stats_size[];
+#define NPU_FOE_STATS_ADDR	((u32)(unsigned long)__npu_stats_base)
+#define NPU_FOE_STATS_SIZE	((u32)(unsigned long)__npu_stats_size)
+
+/* ================================================================
  * Field debug block: fixed SRAM window the host reads and writes
  * with sys memrl / memwl at NDBG_BASE & 0x1FFFFFFF. See docs/debug.md.
  * ================================================================ */

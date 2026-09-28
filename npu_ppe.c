@@ -878,6 +878,92 @@ static int sram_set_entry_to_zero(u32 size)
 	return 1;
 }
 
+/*
+ * FLOW_STATS_SETUP (PPE mailbox function 4).
+ *
+ * The Linux host calls this from airoha_npu_ppe_stats_setup() while
+ * airoha_ppe_offload_setup() runs, but only when the host kernel was built
+ * with CONFIG_NET_AIROHA_FLOW_STATS=y. That call is fatal on error:
+ *
+ *     ppe_num_stats_entries = airoha_ppe_get_total_num_stats_entries(ppe);
+ *     if (ppe_num_stats_entries > 0) {
+ *             err = npu->ops.ppe_init_stats(npu, ppe->foe_stats_dma, ...);
+ *             if (err)
+ *                     goto error_npu_put;   -> eth->npu stays NULL
+ *     }
+ *
+ * so answering failure here means the PPE never binds to the NPU and no
+ * flow is ever offloaded. The target config for an7581 sets the option to
+ * y, so this handler has to succeed before ClankerNPU can be tried at all.
+ *
+ * Message layout (struct ppe_mbox_data, 28 bytes, see airoha_npu.c):
+ *     +0  func_type                NPU_OP_SET (1)
+ *     +4  func_id                  PPE_FUNC_SET_WAIT_FLOW_STATS_SETUP (4)
+ *     +8  stats_info.npu_stats_addr   <-- we fill this in
+ *     +12 stats_info.foe_stats_addr   <-- host-provided
+ *
+ * The host then does:
+ *     npu->stats = devm_ioremap(dev, npu_stats_addr,
+ *                               num_stats_entries * sizeof(struct airoha_foe_stats));
+ * and uses that mapping two ways:
+ *     airoha_ppe_foe_flow_stat_entry_reset() -> memset_io(&npu->stats[i], 0, 8)
+ *     airoha_ppe_foe_entry_get_stats()       -> memcpy_fromio(&s, &npu->stats[i], 8)
+ *
+ * A 64-bit counter is assembled from two halves: the high 32 bits come from
+ * the host's coherent buffer at foe_stats_addr (filled by the PPE), the low
+ * 32 bits from this window:
+ *     stats.packets = ppe->foe_stats[i].packets << 32 | npu_stats.packets;
+ *
+ * So the window must be real DRAM the host can both write and read; handing
+ * back a fake address would have the host memset_io/memcpy_fromio somewhere
+ * unrelated and report garbage counters.
+ *
+ * What this version does and does not do:
+ *   - publishes a reserved, zeroed window inside the NPU's own DRAM
+ *     (NPU_FOE_STATS_ADDR, see link.ld) and records the host buffer address
+ *   - it does NOT yet populate the low 32 bits. The host zeroes the window
+ *     itself on every flow commit, so until the PPE counter plumbing is
+ *     verified on hardware the window reads back as zeros, which the host
+ *     reports as a low half of 0 rather than as an error.
+ *   - deliberately does not return a fabricated address or a fake buffer
+ *     just to make the initialisation pass.
+ *
+ * The state below is carried for the follow-up counter plumbing; while
+ * nothing reads it yet the compiler is free to elide it. What proves the
+ * handler ran on a live board is the shared debug block, which
+ * hwnat_mail_dispatch() updates for every call:
+ *     NC_PPE_LAST = func_id << 8 | result   ->  0x0401 on success
+ *     NDBG_TRACE(NDBG_PPE, 4, 1, published_window_address)
+ */
+static u32 hwnat_foe_stats_foe_addr;	/* host coherent buffer, PPE side */
+static u32 hwnat_foe_stats_entries;
+static u32 hwnat_foe_stats_ready;
+
+static int hwnat_set_wait_flow_stats(u32 addr)
+{
+	u32 foe_addr = REG32(addr + 12);
+	u32 i, words = NPU_FOE_STATS_SIZE / 4;
+
+	/* Publish the window the host will ioremap. */
+	REG32(addr + 8) = NPU_FOE_STATS_ADDR;
+
+	/*
+	 * Define the initial contents. The host resets individual entries on
+	 * flow commit, but a first read before any commit would otherwise see
+	 * whatever DRAM held at boot. DRAM 0x84000000..0x849FFFFF is already
+	 * inside the 0x8xxxxxxx view the hardware sees, so no alias
+	 * translation is needed here.
+	 */
+	for (i = 0; i < words; i++)
+		REG32(NPU_FOE_STATS_ADDR + (i << 2)) = 0;
+	npu_barrier();
+
+	hwnat_foe_stats_foe_addr = foe_addr;
+	hwnat_foe_stats_entries = NPU_FOE_STATS_SIZE / 8;
+	hwnat_foe_stats_ready = 1;
+	return 1;
+}
+
 /* HWNAT_API: _hwnat_set_func_id at +8, data_size +12, data +16 */
 static int hwnat_set_wait_api(u32 addr)
 {
@@ -945,8 +1031,8 @@ int hwnat_mail_dispatch(u32 base, u32 cnt)
 	case 3:			/* API */
 		result = hwnat_set_wait_api(addr);
 		break;
-	case 4:			/* FLOW_STATS_SETUP, not implemented */
-		result = 0;
+	case 4:			/* FLOW_STATS_SETUP */
+		result = hwnat_set_wait_flow_stats(addr);
 		break;
 	default:		/* L4S_SETUP */
 		npu_printf("L4S not support!!!\n");

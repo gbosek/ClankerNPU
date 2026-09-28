@@ -68,6 +68,8 @@ void npu_dbg_init(void)
 	ndbg_sym(i++, NDBG_TAG('B', 'R', 'D', 'G'), (u32)&npu_bridge_base);
 	ndbg_sym(i++, NDBG_TAG('T', 'U', 'N', 'F'), (u32)tunnel_func_table);
 	ndbg_sym(i++, NDBG_TAG('L', '4', 'S', 'E'), (u32)&tunnel_ecn_enabled);
+	/* FOE flow-stats window the host ioremaps after FLOW_STATS_SETUP */
+	ndbg_sym(i++, NDBG_TAG('F', 'O', 'E', 'S'), NPU_FOE_STATS_ADDR);
 #endif
 #ifdef WIFI_EAGLE
 	ndbg_sym(i++, NDBG_TAG('E', 'D', 'B', 'G'), (u32)&dbg);

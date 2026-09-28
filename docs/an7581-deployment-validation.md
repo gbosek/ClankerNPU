@@ -3,8 +3,10 @@
 This is a test plan, not a claim that ClankerNPU has run on any board.
 The three devices currently run a custom ImmortalWrt 6.18.52 image with
 the Airoha Linux NPU driver and vendor NPU firmware version 1456.62.
-There is no optical connection yet, so PON, PPPoE, IPTV and dual-WAN
-offload have not been measured on this deployment.
+As of the 2026-09-28 live check, TF has an operational Telecom PON
+link and XG2010G has a Telecom PPPoE session through TF. MD and the
+XG2010G PON port still have no optical signal. All observations below
+use the **vendor** NPU firmware, not ClankerNPU.
 
 ## Intended topology
 
@@ -16,11 +18,12 @@ offload have not been measured on this deployment.
 
 The XG2010G port names above are from the device tree and current Linux
 enumeration, **not** from connector labels. Before moving cables, check
-the physical connector-to-interface mapping on the actual board. Today
-all four XG2010G `lan*` interfaces are still members of `br-lan`, so
-`lan3` is not yet a Telecom WAN. TF already places `lan1` in its
-Internet bridge and `lan2` in its IPTV bridge, but both PON and IPTV
-service behavior remain untested without the optical/service links.
+the physical connector-to-interface mapping on the actual board. XG2010G
+`lan3` is now outside `br-lan` and is the lower device of the active
+`pppoe-wanb` Telecom session. TF places `lan1` in its Internet bridge
+and `lan2` in its IPTV bridge. TF's PON has reached O5 and IPTV multicast
+packets arrive on a PON virtual interface, but TF `lan2` has no carrier;
+IPTV playback and hardware replication remain untested.
 The IPTV set-top box on TF `lan2` bypasses XG2010G entirely.
 
 ## What “offload” means here
@@ -52,16 +55,18 @@ whether a bridge or multicast packet uses a separate hardware path.
    using real telemetry, and basic Ethernet forwarding. A build alone
    is not enough.
 2. On TF with the vendor firmware, validate optical registration,
-   Telecom Internet bridge, and IPTV separately. Record optical and
+   Telecom Internet bridge, and IPTV separately. Optical O5 and a
+   working downstream PPPoE session are now observed; PPE bridge
+   binding and IPTV egress are still open. Record optical and
    thermal health before sustained load. For the Internet bridge,
    observe a bound L2 flow with learned nonzero MAC addresses and
    increasing PPE counters. For IPTV, verify IGMP/MLD joins, MDB
    entries, playback and channel changes; hardware replication needs
    separate driver/counter evidence.
-3. Move only XG2010G `lan3` out of `br-lan`, after confirming cabling
-   and management access, and configure it as the Telecom PPPoE WAN.
-   Validate LAN isolation, ordinary routing, NAT and then hardware
-   offload before enabling the second WAN.
+3. On XG2010G, `lan3` has already been moved out of `br-lan` and
+   configured as the Telecom PPPoE WAN. Continue testing LAN isolation,
+   NAT and hardware offload under controlled traffic before enabling
+   the second WAN.
 4. Add Unicom optical registration and PON/PPPoE on XG2010G `pon0`.
    The PON host driver must supply the correct GEM/T-CONT/service
    metadata for offload. Validate each WAN in isolation, then both
@@ -76,12 +81,12 @@ whether a bridge or multicast packet uses a separate hardware path.
 
 | Flow class | Proof to collect | Current status |
 |---|---|---|
-| TF PON-to-2.5G Internet bridge | PON service up, correct VLAN, bound PPE L2 entry with learned MAC, counters increasing while traffic crosses TF | Not testable yet: no fiber |
-| TF PON-to-`lan2` IPTV | Correct bridge/MDB and stable playback; for hardware claim, matching multicast replication entry and hardware counters | Not testable yet: no fiber/IPTV source |
-| XG Telecom PPPoE `lan3` to 10G/1G LAN | Correct WAN egress, conntrack `[HW_OFFLOAD]` rather than only `[OFFLOAD]`, PPE bound entry/counters, bidirectional throughput and CPU | Not configured yet |
+| TF PON-to-2.5G Internet bridge | PON service up, correct VLAN, bound PPE L2 entry with learned MAC, counters increasing while traffic crosses TF | O5 and downstream PPPoE observed; TF bridge PPE binding not proven |
+| TF PON-to-`lan2` IPTV | Correct bridge/MDB and stable playback; for hardware claim, matching multicast replication entry and hardware counters | Multicast ingress observed; `lan2` has no carrier; egress/offload not proven |
+| XG Telecom PPPoE `lan3` to LAN | Correct WAN egress, conntrack `[HW_OFFLOAD]` rather than only `[OFFLOAD]`, PPE bound entry/counters, bidirectional throughput and CPU | Vendor-firmware IPv4 TCP download reached `[HW_OFFLOAD]` and two PPE BND entries during one run; repeat 2 MB sample remained `[OFFLOAD]`, so coverage/stability still open |
 | XG Unicom PON PPPoE to LAN | Same evidence, plus PON GEM/T-CONT mapping and optical registration | Not testable yet: no fiber |
 | Both WANs with `mwan3` | Per-flow policy/egress, hardware entries on both WANs, failover and reconnection without stale routes or leaks | Not configured yet |
-| MD standby | Vendor firmware boot and normal gateway functions; Clanker pilot only through recoverable path | Vendor boot observed; Clanker untested |
+| MD standby | Vendor firmware boot and normal gateway functions; Clanker pilot only through recoverable path | Vendor 1456.62 boot/version response observed; no forwarding path or Clanker run yet |
 
 For each run record image/firmware hash, board, port/link speed, flow
 direction, IPv4/IPv6, packet size, concurrency, throughput, CPU and
@@ -91,20 +96,111 @@ proof. A short speed result is not a thermal or stability qualification.
 
 ## Present observations and known gaps
 
-- All three boards report NPU firmware 1456.62 at boot. With no eligible
-  forwarded traffic, `npu_attached: 0` and empty PPE bind tables are
-  expected from this driver's lazy PPE initialization; neither proves a
-  broken NPU nor proves working offload.
-- XG2010G's current `nft` routed flowtable lists `lan1`–`lan4` and
-  `pon0` with `flags offload`; its network configuration still has only
-  LAN. TF's corresponding routed flowtable lists `lan1`, `lan3`,
-  `lan4`, not `pon0`/`lan2`; this alone cannot establish the status of
-  its bridge or multicast hardware path.
+- All three boards report vendor NPU firmware 1456.62 at boot. On MD,
+  with no eligible forwarded traffic, `npu_attached: 0` and empty PPE
+  bind tables are expected from lazy PPE initialization. XG2010G now
+  reports `npu_attached: 1` with active Telecom PPPoE.
+- XG2010G's current `nft` routed flowtable lists `lan1`, `lan2`,
+  `lan3`, `lan4`, and `pppoe-wanb` with `flags offload`. TF's routed
+  flowtable lists `lan1`, `lan3`, `lan4`, and `pon0`, not `lan2`; this
+  alone cannot establish its bridge or multicast hardware path.
+- A Windows host with several NICs normally uses Ethernet 4 for its
+  default Internet route. Merely binding curl to the Ethernet 6 IPv4
+  address did **not** guarantee egress over Ethernet 6. The bounded
+  `scripts/windows-interface-download.ps1` probe uses Windows
+  `IP_UNICAST_IF` to pin only the test socket to Ethernet 6, without
+  changing the PC's default route. One 3 MB IPv4 TCP download through
+  XG2010G showed a matching conntrack `[HW_OFFLOAD]`, two PPE `BND`
+  entries, and an approximately 3.47 MB Ethernet 6 receive delta.
+  A later 2 MB transfer was sampled as `[OFFLOAD]` with no BND entry;
+  this is evidence of at least one successful hardware-offloaded flow,
+  **not** a claim that all flows or all packets offload reliably.
+- TF now reports `lifecycle: operational`, `optical_signal: 1`, ONU
+  state O5, and multicast receive traffic on `ct-iptv-mc`. TF `lan2`
+  is disconnected, so neither IPTV egress nor hardware multicast
+  replication has been verified. XG2010G and MD still report no PON
+  optical signal.
 - The XG2010G 10G `lan1` PCS has shown a `No FBCK Lock` boot warning.
   Link training and sustained traffic must be checked with an actual
   10G peer before counting both 10G ports as validated.
+- **FLOW_STATS_SETUP compatibility gate:** the host's
+  `airoha_ppe_offload_setup()` calls `ppe_init_stats()` when
+  `CONFIG_NET_AIROHA_FLOW_STATS=y`. The host sends PPE mailbox function
+  ID 4 and aborts offload setup on failure. The current ClankerNPU source
+  now answers this request with a 64 KiB reserved DRAM window at
+  `0x84900000`, matching 8,192 entries of 8 bytes, and clears the window
+  before publishing it. The AN7581 target kernel config in the XG2010G
+  build tree enables flow stats, but the running devices do not expose
+  `/proc/config.gz`, so their compiled setting is not yet proven.
+  **This is initialization compatibility only:** ClankerNPU does not yet
+  maintain the NPU-side counter words. The host mapping, PPE writes,
+  reported counter values, memory lifetime and cache behavior all need
+  on-board verification. Do not use these counters as offload proof yet.
+  A recoverable **test** kernel with flow stats disabled can still
+  isolate basic PPE compatibility without validating NPU flow statistics.
 - XG2010G bridge L2 binding and PON offload host-driver fixes have
   been developed separately, but the latest test image with the bridge
   fix has not been flashed or validated on the live board.
 - Avoid production cutover or flash changes until optical links,
   recovery procedure and end-to-end traffic generation are available.
+
+## XG-040G-MD ClankerNPU preflight (2026-09-28)
+
+- Live SoC ID reads are `0x000E0000` and `0x0204B006`, matching the
+  existing ClankerNPU AN7581 family/revision capability entry. The
+  driver loads the vendor RV32/data images from `/lib/firmware/airoha/`.
+- The vendor firmware version mailbox replies `1456.62`; no NPU WDT
+  interrupt was observed. Eight WDT labels are not eight live hart
+  heartbeats. The local `AN7581_NOWIFI` image builds and contains the
+  no-Wi-Fi version handler, PPE handler and core-7 entry. This remains
+  static evidence only: the board has **not** run ClankerNPU.
+- Only MD `lan1` has a physical link; `pon0` has no optical signal.
+  Router-local traffic cannot prove forwarding offload. No second
+  physical traffic endpoint is currently connected to MD.
+- MD exposes one UBI `fit` system-image volume and no `kexec` command.
+  A validated serial/U-Boot RAM-boot or equivalent recovery method is
+  required before replacing firmware and rebooting. Do not assume an
+  A/B rollback slot. Keep the vendor image and hashes intact.
+
+For repeatable, read-only baseline collection on an Airoha OpenWrt
+device, run `sh scripts/offload-snapshot.sh` on the device (or pipe this
+file to `ssh root@DEVICE sh -s`). The script reports only interface,
+flowtable, PPE and thermal summaries; it does not read LOID, PPPoE
+credentials or packet payloads. Run it before and during controlled
+forwarding traffic and compare the two outputs.
+
+## Work log (2026-09-28)
+
+- **040GTF:** optical registration reached O5 and the Telecom Internet
+  bridge fed the XG2010G PPPoE session. The IPTV bridge received
+  multicast traffic, but `lan2` had no carrier, so playback and hardware
+  replication were not tested.
+- **XG2010G:** Telecom PPPoE ran over `lan3` from TF. A Windows test
+  socket was explicitly pinned to Ethernet 6 while the PC's normal
+  Internet route remained on Ethernet 4. One 3 MB download showed the
+  vendor-firmware flow as `[HW_OFFLOAD]` with two PPE BND entries; a
+  later 2 MB sample showed `[OFFLOAD]` without BND. This confirms one
+  observed hardware-offloaded flow, not consistent offload coverage.
+  XG2010G `pon0` still had no optical signal, so Unicom and dual-WAN
+  tests remain open.
+- **040GMD:** stock NPU firmware 1456.62 booted and answered the version
+  query. SoC IDs were `0x000E0000` and `0x0204B006`, matching the
+  existing AN7581 capability entry. Only `lan1` was connected to the
+  Windows test host; PON had no optical signal and no forwarding flow
+  existed. The device has one UBI `fit` volume and no `kexec` utility;
+  serial/U-Boot RAM recovery has not been established. ClankerNPU has
+  **not** run on this board. A captured 70.1 °C CPU reading also means
+  sustained load should wait until temperatures are rechecked.
+- **ClankerNPU:** `AN7581_NOWIFI` built locally. The image files were
+  `npu_rv32.bin` (29,580 bytes, SHA-256
+  `1ccf37f394334ec97d4f97818f6b676caf3796163996a438c03bbb614b3837a4`)
+  and `npu_data.bin` (128 bytes, SHA-256
+  `2ce4e2568962c752f079e53ce35810d2de5271bbbabd8e50ef10cd9e5358af79`).
+  Function-4 stats setup now publishes the reserved window described
+  above, but the firmware does not yet update NPU-side counters and no
+  board has booted this image.
+
+Next: establish a recoverable RAM-boot path for MD, attach a second
+traffic endpoint, recheck temperature, then verify Clanker mailbox,
+hart/trap telemetry, PPE setup and real forwarded flows. Continue with
+TF IPTV egress and XG2010G Unicom PON only when those links are present.

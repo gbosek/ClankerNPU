@@ -11,7 +11,7 @@ scheduling from the ARM host.
 | SoC | Harts | SRAM | WiFi chips | Extra features |
 |---|---:|---:|---|---|
 | AN7552 | 2 | 256 KB | MT7916, MT7991, MT7993 | none |
-| AN7581 | 8 | 480 KB | MT7916, MT7992, MT7996 | tunnel offload, TR-471 |
+| AN7581 | 8 | 480 KB | MT7916, MT7992, MT7996, none (XG2010G profile) | tunnel offload, TR-471; XG2010G wired/PON profile |
 | AN7583 | 6 | 512 KB | MT7916, MT7992, MT7993, MT7996, none | tunnel offload, GPON DBA |
 
 MT7916 and MT7996 use the **kite** datapath; MT7991, MT7992 and MT7993
@@ -97,8 +97,9 @@ not have. `core_dispatch()` in `npu_main.c` is the whole map.
 Requires `riscv64-unknown-elf-gcc` (tested with GCC 14.2).
 
 ```sh
-make SOC=AN7583 WIFI=MT7993        # one variant
-make all-variants                  # all 11 variants
+make SOC=AN7583 WIFI=MT7993        # one generic variant
+make xg2010g-nowifi                 # XG2010G: AN7581 + NOWIFI
+make all-variants                  # generic variants + XG2010G profile
 make SOC=AN7583 WIFI=MT7993 disasm # build/<variant>/firmware.dis
 ```
 
@@ -106,6 +107,7 @@ make SOC=AN7583 WIFI=MT7993 disasm # build/<variant>/firmware.dis
 |---|---|---|
 | `SOC` | `AN7583` | `AN7552`, `AN7581`, `AN7583` |
 | `WIFI` | `MT7996` | `MT7916`, `MT7991`, `MT7992`, `MT7993`, `MT7996`, `NOWIFI` |
+| `BOARD` | `GENERIC` | `GENERIC`, `XG2010G`; XG2010G requires `SOC=AN7581 WIFI=NOWIFI` |
 | `MAILTRACE` | 0 | 1 logs every WiFi mail from the mailbox ISR |
 | `NPUTX` | 1 | 0 stages host tx frames but never writes the WiFi tx ring |
 | `NPUDBG` | 0 | 1 starts with the WiFi and stats print bits of the [debug block](docs/debug.md) set |
@@ -113,7 +115,11 @@ make SOC=AN7583 WIFI=MT7993 disasm # build/<variant>/firmware.dis
 | `GITREV` | `git describe` | hash in the boot `NPU Version` line |
 | `CROSS` | `riscv64-unknown-elf-` | toolchain prefix |
 
-Outputs in `build/<SOC>_<WIFI>/`:
+Generic outputs remain in `build/<SOC>_<WIFI>/`. Board-profile builds use `build/<SOC>_<BOARD>_<WIFI>/`, so the XG2010G image is written to `build/AN7581_XG2010G_NOWIFI/`.
+
+The first XG2010G stage intentionally changes only build/profile selection. It keeps the existing AN7581 PPE/HWNAT/tunnel behavior, disables WiFi paths through `NOWIFI`, and adds a compile-time guard so the board profile cannot accidentally be built for another SoC or WiFi variant. See [docs/xg2010g.md](docs/xg2010g.md).
+
+Outputs:
 
 | file | content |
 |---|---|

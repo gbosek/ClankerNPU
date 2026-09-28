@@ -1,21 +1,14 @@
 #ifndef NPU_CONFIG_H
 #define NPU_CONFIG_H
 
-/* Boot version line. Board profiles append their board name. */
+/* Boot version line: release.wifi.git hash */
 #define NPU_INIT_VERSION    "TLB7.8.0.0_v003"
-#if defined(XG2010G_PROFILE)
-#define NPU_VERSION	NPU_INIT_VERSION "." NPU_WIFI_NAME ".XG2010G." NPU_GIT_REV
-#else
 #define NPU_VERSION	NPU_INIT_VERSION "." NPU_WIFI_NAME "." NPU_GIT_REV
-#endif
 
 /*
  * Build-time variant selection.
  * Define exactly one SoC: AN7552, AN7581, AN7583
  * Define exactly one WiFi chip (or NOWIFI): MT7916, MT7991, MT7992, MT7993, MT7996, NOWIFI
- * Optional board profile:
- *   XG2010G_PROFILE             -> requires AN7581 + NOWIFI
- *
  * SoC → core count:
  *   AN7552 → 2 cores
  *   AN7581 → 8 cores
@@ -57,15 +50,13 @@
 #error "Define one WiFi chip: MT7916, MT7991, MT7992, MT7993, MT7996, or NOWIFI"
 #endif
 
-#if defined(XG2010G_PROFILE)
-#if !defined(AN7581) || !defined(NOWIFI)
-#error "XG2010G_PROFILE requires SOC=AN7581 WIFI=NOWIFI"
-#endif
-#define HAS_XG2010G
+#if defined(AN7581) && defined(NOWIFI)
+#define HAS_AN7581_NOWIFI
 /*
- * XG2010G is a wired/PON gateway. Keep WiFi-only paths disabled.
- * Do not reuse AN7583 GPON DBA: XG2010G's PON datapath is board/host specific.
- * HAS_XG2010G is an extension point for later PPE/QDMA/PON tuning.
+ * Generic AN7581 build for platforms that do not use the NPU WiFi datapath.
+ * Keep board-specific Ethernet/PON topology in the host driver and runtime
+ * HWNAT mailbox configuration. This flag is only an extension point for
+ * AN7581-wide telemetry or optimizations that are safe across boards.
  */
 #endif
 

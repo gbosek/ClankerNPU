@@ -1,0 +1,67 @@
+name: Build AN7581 NOWIFI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - xg2010g-nowifi-profile
+      - an7581-nowifi-profile
+    paths:
+      - 'Makefile'
+      - 'npu_config.h'
+      - 'npu_*.c'
+      - 'npu_*.h'
+      - 'crt0.S'
+      - 'link.ld'
+      - 'docs/an7581-nowifi.md'
+      - '.github/workflows/build-an7581-nowifi.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RISC-V bare-metal toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
+
+      - name: Build generic AN7581 no-WiFi profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          make clean
+          make an7581-nowifi
+          test -s build/AN7581_NOWIFI/npu_rv32.bin
+          test -s build/AN7581_NOWIFI/npu_data.bin
+          make SOC=AN7581 WIFI=NOWIFI disasm
+          riscv64-unknown-elf-size build/AN7581_NOWIFI/firmware.elf
+          riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf | grep -q ' core7_main$'
+          riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf | grep -q ' tunnel_offload_loop$'
+          strings build/AN7581_NOWIFI/npu_rv32.bin | grep -F 'NOWIFI'
+
+      - name: Verify AN7581 NOWIFI is part of all-variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'AN7581_NOWIFI' Makefile
+          grep -q 'HAS_AN7581_NOWIFI' npu_config.h
+
+      - name: Rebuild final artifact
+        run: |
+          make clean
+          make an7581-nowifi
+          sha256sum             build/AN7581_NOWIFI/npu_rv32.bin             build/AN7581_NOWIFI/npu_data.bin             > build/AN7581_NOWIFI/SHA256SUMS
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClankerNPU-AN7581-NOWIFI
+          path: |
+            build/AN7581_NOWIFI/npu_rv32.bin
+            build/AN7581_NOWIFI/npu_data.bin
+            build/AN7581_NOWIFI/firmware.elf
+            build/AN7581_NOWIFI/firmware.map
+            build/AN7581_NOWIFI/SHA256SUMS
+          retention-days: 7

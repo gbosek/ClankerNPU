@@ -37,9 +37,62 @@ jobs:
           test -s build/AN7581_NOWIFI/npu_data.bin
           make SOC=AN7581 WIFI=NOWIFI disasm
           riscv64-unknown-elf-size build/AN7581_NOWIFI/firmware.elf
-          riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf | grep -q ' core7_main$'
-          riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf | grep -q ' tunnel_offload_loop$'
-          strings build/AN7581_NOWIFI/npu_rv32.bin | grep -F 'NOWIFI'
+          riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf > build/AN7581_NOWIFI/symbols.txt
+          grep -E ' [Tt] core7_main
+      - name: Verify AN7581 NOWIFI is part of all-variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'AN7581_NOWIFI' Makefile
+          grep -q 'HAS_AN7581_NOWIFI' npu_config.h
+
+      - name: Rebuild final artifact
+        run: |
+          make clean
+          make an7581-nowifi
+          sha256sum             build/AN7581_NOWIFI/npu_rv32.bin             build/AN7581_NOWIFI/npu_data.bin             > build/AN7581_NOWIFI/SHA256SUMS
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClankerNPU-AN7581-NOWIFI
+          path: |
+            build/AN7581_NOWIFI/npu_rv32.bin
+            build/AN7581_NOWIFI/npu_data.bin
+            build/AN7581_NOWIFI/firmware.elf
+            build/AN7581_NOWIFI/firmware.map
+            build/AN7581_NOWIFI/SHA256SUMS
+            build/AN7581_NOWIFI/symbols.txt
+            build/AN7581_NOWIFI/strings.txt
+          retention-days: 7
+ build/AN7581_NOWIFI/symbols.txt
+          grep -E ' [Tt] tunnel_offload_loop
+      - name: Verify AN7581 NOWIFI is part of all-variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'AN7581_NOWIFI' Makefile
+          grep -q 'HAS_AN7581_NOWIFI' npu_config.h
+
+      - name: Rebuild final artifact
+        run: |
+          make clean
+          make an7581-nowifi
+          sha256sum             build/AN7581_NOWIFI/npu_rv32.bin             build/AN7581_NOWIFI/npu_data.bin             > build/AN7581_NOWIFI/SHA256SUMS
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClankerNPU-AN7581-NOWIFI
+          path: |
+            build/AN7581_NOWIFI/npu_rv32.bin
+            build/AN7581_NOWIFI/npu_data.bin
+            build/AN7581_NOWIFI/firmware.elf
+            build/AN7581_NOWIFI/firmware.map
+            build/AN7581_NOWIFI/SHA256SUMS
+          retention-days: 7
+ build/AN7581_NOWIFI/symbols.txt
+          strings build/AN7581_NOWIFI/npu_rv32.bin > build/AN7581_NOWIFI/strings.txt
 
       - name: Verify AN7581 NOWIFI is part of all-variants
         shell: bash

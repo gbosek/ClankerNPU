@@ -51,6 +51,7 @@ flowchart TD
 | core | slot | handler | built when |
 |---:|---:|---|---|
 | 0 | 0 | `wifi_mail_dispatch` | a WiFi chip is selected |
+| 0 | 0 | `nowifi_mail_dispatch` | AN7581 + NOWIFI; version query only |
 | 0 | 1 | `tunnel_mail_dispatch` | always |
 | 0 | 4 | `kite_wifi_config` / `eagle_wifi_config` | AN7581 with WiFi |
 | 0 | 5 | `hwnat_mail_dispatch` | AN7581, AN7583 |
@@ -89,6 +90,13 @@ follow.
 The interface id is a band on kite and a ring id on eagle. Both families
 share the table shape; each has its own handler set
 (`npu_wifi_kite.c`, `npu_wifi_eagle.c`).
+
+On `AN7581_NOWIFI`, the Linux host still sends the GET_WAIT firmware
+version request through slot 0 during probe. The no-WiFi handler accepts
+only interface 0, function type 3, function id 10, and a 12-byte or larger
+message; it returns packed major/minor `7.8`. All other WiFi requests
+fail, and no WiFi datapath is enabled. The version reply proves only this
+mailbox exchange, not that PPE flow offload or all harts are healthy.
 
 | id | SET_WAIT | | id | GET_WAIT |
 |---:|---|---|---:|---|

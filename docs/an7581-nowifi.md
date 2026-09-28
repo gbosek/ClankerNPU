@@ -3,9 +3,9 @@
 This fork promotes `AN7581 + NOWIFI` to a first-class ClankerNPU build
 for **any Airoha AN7581 platform that does not use the NPU WiFi datapath**.
 
-It is deliberately not tied to Gemtek XG2010G. XG2010G is the first
-planned validation platform because it provides a useful wired/PON test
-case, but the firmware profile itself must remain SoC-wide.
+It is deliberately not tied to Gemtek XG2010G. The first planned
+recoverable boot test is on a spare XG-040G-MD; XG2010G is the eventual
+dual-WAN routing target. The firmware profile itself must remain SoC-wide.
 
 ## Build
 
@@ -59,6 +59,8 @@ The initial variant intentionally:
 - preserves existing AN7581 PPE/HWNAT initialization;
 - preserves AN7581 tunnel/NPU-bridge support;
 - preserves mailbox ABI expected by the Linux `airoha_npu` host driver;
+- answers the host's slot-0 firmware-version probe (`7.8`) without
+  enabling any WiFi datapath or accepting unrelated WiFi commands;
 - does not enable the AN7583 GPON DBA implementation;
 - does not hard-code XG2010G, EN7572, switch, XSI or WAN-port values.
 
@@ -145,3 +147,6 @@ NDBG. It is a test platform, not a compile-time dependency.
 Any XG2010G-specific integration, such as EN7572 service mapping or a
 particular LuCI layout, should live in the XG2010G firmware/plugin tree,
 not in this generic AN7581 no-WiFi firmware profile.
+
+The three-board deployment topology, offload boundaries and acceptance
+criteria are recorded in [AN7581 deployment validation](an7581-deployment-validation.md).

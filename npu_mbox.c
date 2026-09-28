@@ -87,6 +87,28 @@ void mbox_isr(int src)
 	}
 }
 
+#ifdef HAS_AN7581_NOWIFI
+/* The Linux host probes the firmware version through WiFi mailbox slot 0
+ * even on wired-only boards. Keep this one control-plane query available;
+ * it does not initialize or enable the WiFi datapath.
+ */
+static int nowifi_mail_dispatch(u32 base, u32 cnt)
+{
+	u32 *msg = (u32 *)((base & 0x3FFFFFFF) | NPU_ADDR_MASK);
+
+	/* wlan_mbox_data: ifindex/type, function id, then a u32 reply. */
+	if (cnt < 3 * sizeof(u32) || (msg[0] & 0xf) != 0 ||
+	    ((msg[0] >> 4) & 0xf) != 3 || msg[1] != 10)
+		return 0;
+
+	/* NPU_INIT_VERSION is TLB7.8...; this is the host's packed
+	 * major.minor version field, not a claim of vendor ABI equivalence.
+	 */
+	msg[2] = (7u << 16) | 8u;
+	return 1;
+}
+#endif
+
 void mailbox_init(void)
 {
 	u32 i;
@@ -112,7 +134,9 @@ void mailbox_init(void)
 
 	/* register handlers into core 0's callback slots */
 	callbacks = (u32 *)&mbox_dispatch[0][48];
-#ifdef HAS_WIFI
+#ifdef HAS_AN7581_NOWIFI
+	callbacks[0] = (u32)(void *)nowifi_mail_dispatch;
+#elif defined(HAS_WIFI)
 	callbacks[0] = (u32)(void *)wifi_mail_dispatch;
 #endif
 	callbacks[1] = (u32)(void *)tunnel_mail_dispatch;

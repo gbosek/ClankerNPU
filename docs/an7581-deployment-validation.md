@@ -169,7 +169,7 @@ flowtable, PPE and thermal summaries; it does not read LOID, PPPoE
 credentials or packet payloads. Run it before and during controlled
 forwarding traffic and compare the two outputs.
 
-## Work log (2026-09-28)
+## Live field log (2026-09-28)
 
 - **040GTF:** optical registration reached O5 and the Telecom Internet
   bridge fed the XG2010G PPPoE session. The IPTV bridge received
@@ -191,6 +191,8 @@ forwarding traffic and compare the two outputs.
   serial/U-Boot RAM recovery has not been established. ClankerNPU has
   **not** run on this board. A captured 70.1 °C CPU reading also means
   sustained load should wait until temperatures are rechecked.
+## Source work (2026-09-29)
+
 - **ClankerNPU:** `AN7581_NOWIFI` built locally. The image files were
   `npu_rv32.bin` (29,580 bytes, SHA-256
   `1ccf37f394334ec97d4f97818f6b676caf3796163996a438c03bbb614b3837a4`)

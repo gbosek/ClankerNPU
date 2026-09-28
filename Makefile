@@ -9,8 +9,6 @@ SIZE    := $(CROSS)size
 SOC     ?= AN7583
 # WiFi: MT7916, MT7991, MT7992, MT7993, MT7996, NOWIFI
 WIFI    ?= MT7996
-# Board profile: GENERIC or XG2010G. XG2010G is valid only with AN7581+NOWIFI.
-BOARD   ?= GENERIC
 # 1 logs every WiFi mailbox command, from inside the mailbox ISR
 MAILTRACE ?= 0
 # 0 stages host tx frames but never writes the WiFi tx ring
@@ -23,23 +21,20 @@ PROF ?= 0
 GITREV ?= $(shell git describe --always --dirty --abbrev=7 2>/dev/null || echo nogit)
 
 ARCH    := -march=rv32imc_zicsr_zifencei -mabi=ilp32
-BOARD_DEFS := $(if $(filter GENERIC,$(BOARD)),,-D$(BOARD)_PROFILE -DNPU_BOARD_NAME='"$(BOARD)"')
-
 CFLAGS  := $(ARCH) -Os -ffunction-sections -fdata-sections \
            -fno-builtin -ffreestanding -nostdlib \
            -Wall -Wno-unused-function \
-           -D$(SOC) -D$(WIFI) $(BOARD_DEFS) -DNPU_WIFI_NAME='"$(WIFI)"' \
+           -D$(SOC) -D$(WIFI) -DNPU_WIFI_NAME='"$(WIFI)"' \
            -DNPU_GIT_REV='"$(GITREV)"' $(if $(filter 1,$(MAILTRACE)),-DNPU_MAIL_TRACE) \
            $(if $(filter 0,$(NPUTX)),-DEAGLE_NO_TX_PUSH) \
            $(if $(filter 1,$(NPUDBG)),-DNPU_DATAPATH_DBG) \
            $(if $(filter 1,$(PROF)),-DNPU_PROFILE)
-ASFLAGS := $(ARCH) -D$(SOC) -D$(WIFI) $(if $(filter GENERIC,$(BOARD)),,-D$(BOARD)_PROFILE)
+ASFLAGS := $(ARCH) -D$(SOC) -D$(WIFI)
 LIBGCC  := $(shell $(CC) $(ARCH) -print-libgcc-file-name)
 LDFLAGS := -m elf32lriscv -T link.ld -nostdlib --gc-sections --relax \
            --print-memory-usage
 
-BUILD_TAG := $(if $(filter GENERIC,$(BOARD)),$(SOC)_$(WIFI),$(SOC)_$(BOARD)_$(WIFI))
-BUILD   := build/$(BUILD_TAG)
+BUILD   := build/$(SOC)_$(WIFI)
 ELF     := $(BUILD)/firmware.elf
 BIN     := $(BUILD)/npu_rv32.bin
 DATA    := $(BUILD)/npu_data.bin
@@ -62,7 +57,7 @@ OBJS    := $(patsubst %.S,$(BUILD)/%.o,$(SRCS_S)) \
            $(patsubst %.c,$(BUILD)/%.o,$(SRCS_C))
 FLAGS   := $(BUILD)/.flags
 
-.PHONY: all clean disasm xg2010g-nowifi
+.PHONY: all clean disasm an7581-nowifi
 
 all: $(BIN) $(DATA)
 
@@ -96,23 +91,21 @@ disasm: $(ELF)
 clean:
 	rm -rf build/
 
-# Explicit wired/PON gateway profile for Gemtek XG2010G.
-xg2010g-nowifi:
-	$(MAKE) SOC=AN7581 WIFI=NOWIFI BOARD=XG2010G
+# First-class no-WiFi build for wired/PON AN7581 platforms.
+# This is intentionally SoC-wide: board-specific WAN/PON topology stays in
+# the host driver and in the runtime HWNAT mailbox parameters.
+an7581-nowifi:
+	$(MAKE) SOC=AN7581 WIFI=NOWIFI
 
-# Build all upstream variants plus the XG2010G AN7581+NOWIFI profile.
-GENERIC_VARIANTS := AN7552_MT7916 AN7552_MT7991 AN7552_MT7993 \
-                    AN7581_MT7916 AN7581_MT7992 AN7581_MT7996 \
-                    AN7583_MT7916 AN7583_MT7992 AN7583_MT7993 \
-                    AN7583_MT7996 AN7583_NOWIFI
-XG2010G_VARIANT := AN7581_XG2010G_NOWIFI
+# Build all supported variants, including AN7581 without NPU WiFi offload.
+VARIANTS := AN7552_MT7916 AN7552_MT7991 AN7552_MT7993 \
+            AN7581_MT7916 AN7581_MT7992 AN7581_MT7996 AN7581_NOWIFI \
+            AN7583_MT7916 AN7583_MT7992 AN7583_MT7993 \
+            AN7583_MT7996 AN7583_NOWIFI
 
-.PHONY: all-variants $(GENERIC_VARIANTS) $(XG2010G_VARIANT)
+.PHONY: all-variants $(VARIANTS)
 
-all-variants: $(GENERIC_VARIANTS) $(XG2010G_VARIANT)
+all-variants: $(VARIANTS)
 
-$(GENERIC_VARIANTS):
-	$(MAKE) SOC=$(word 1,$(subst _, ,$@)) WIFI=$(word 2,$(subst _, ,$@)) BOARD=GENERIC
-
-$(XG2010G_VARIANT):
-	$(MAKE) SOC=AN7581 WIFI=NOWIFI BOARD=XG2010G
+$(VARIANTS):
+	$(MAKE) SOC=$(word 1,$(subst _, ,$@)) WIFI=$(word 2,$(subst _, ,$@))

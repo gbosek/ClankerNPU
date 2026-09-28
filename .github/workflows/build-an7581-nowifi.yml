@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - xg2010g-nowifi-profile
       - an7581-nowifi-profile
     paths:
       - 'Makefile'

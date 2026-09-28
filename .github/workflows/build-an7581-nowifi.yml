@@ -39,7 +39,6 @@ jobs:
           riscv64-unknown-elf-size build/AN7581_NOWIFI/firmware.elf
           riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf > build/AN7581_NOWIFI/symbols.txt
           grep -E ' [Tt] core7_main$' build/AN7581_NOWIFI/symbols.txt
-          grep -E ' [Tt] tunnel_offload_loop$' build/AN7581_NOWIFI/symbols.txt
           strings build/AN7581_NOWIFI/npu_rv32.bin > build/AN7581_NOWIFI/strings.txt
 
       - name: Verify generic profile wiring

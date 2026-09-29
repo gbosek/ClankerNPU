@@ -143,6 +143,25 @@ proof. A short speed result is not a thermal or stability qualification.
   successful setup still is not evidence of live packet/byte accounting.
   A recoverable **test** kernel with flow stats disabled can still
   isolate basic PPE compatibility without validating NPU flow statistics.
+- **Host flow-stat path audit:** the 6.18.52 PPE driver calls
+  `airoha_ppe_foe_flow_stats_update()` as it commits routed FOE entries and
+  resets the host and NPU counter halves for the selected flow-stat index.
+  The same function deliberately returns early for AN7581 native bridge
+  entries because that counter layout is not verified. The host driver source
+  contains allocation, per-entry reset, and read/combination of the two
+  counter halves, but no software per-packet increment path. This narrows the
+  next investigation to the PPE/NPU hardware event/update mechanism; it is not
+  safe to synthesize increments in ClankerNPU without identifying that event
+  and its index/ownership semantics.
+- **Single-flow evidence tooling:** the Windows HTTPS probe now reports the
+  exact client source port, validates HTTP 200 and the requested body length,
+  and reports payload throughput separately from adapter byte deltas. Pass
+  its server IPv4, port, source port, and source IPv4 to
+  `sh scripts/offload-snapshot.sh <peer-ipv4> <peer-port> <source-port> <source-ipv4>`
+  on XG2010G to print the matching conntrack row and PPE `BND` candidate.
+  The candidate output suppresses the unverified per-flow packet/byte values.
+  This is a read-only correlation helper, not proof by itself; correlate the
+  row with `[HW_OFFLOAD]`, actual Ethernet egress, and the selected WAN.
 - XG2010G bridge L2 binding and PON offload host-driver fixes have
   been developed separately, but the latest test image with the bridge
   fix has not been flashed or validated on the live board.
@@ -206,6 +225,30 @@ forwarding traffic and compare the two outputs.
   Function-4 stats setup now publishes the reserved window described
   above, but the firmware does not yet update NPU-side counters and no
   board has booted this image.
+- **Post-merge rebuild (`GITREV=7841433`):**
+  `make an7581-nowifi` passed in local WSL. The linker reported DRAM
+  `30,084 B / 2 MiB` and SRAM `6,816 B / 64 KiB`. The ELF contains
+  `core7_main`, `nowifi_mail_dispatch`, `hwnat_mail_dispatch`, and
+  `npu_flow_stats_setup`; the linked stats window remains
+  `0x84900000` with size `0x10000`, and the image contains the
+  `producer_registered` diagnostic marker. SHA-256:
+  `npu_rv32.bin` =
+  `464d25d0b036d55eeb2ab3bcad255f36aae91a4bc88aa5b381122727deb8778b`;
+  `npu_data.bin` =
+  `b1d0f6c37ee282838ab237f68e8416ca6bc2f7fe8c131f7e1e1caa89e3e0a`.
+  This verifies a local build and static layout/symbol checks only; it does
+  not prove mailbox compatibility at runtime, live stats production, PPE
+  traffic, or a successful boot. No device was modified.
+- The Linux PPE source audit confirmed the AN7581 native-L2B counter path is
+  intentionally skipped by the host driver, while routed-flow setup rewrites
+  the FOE entry and resets the indexed counter storage. No live flow test was
+  performed in this work session because Windows Ethernet 6 (the designated
+  XG2010G test interface) reported **Not Present**. The test scripts passed
+  PowerShell and POSIX-shell syntax validation only; no hardware result is
+  implied.
+- A fresh host-side check on 2026-09-29 again showed Ethernet 4 up at 10 Gbps
+  and Ethernet 6 **Not Present**. No router SSH snapshot or traffic test was
+  attempted, and no interface/default-route settings were changed.
 
 Next: establish a recoverable RAM-boot path for MD, attach a second
 traffic endpoint, recheck temperature, then verify Clanker mailbox,

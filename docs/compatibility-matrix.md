@@ -30,6 +30,53 @@ observed stock firmware version, but they do **not** share one raw revision
 value or one board topology. Host DTS, Ethernet/PON drivers, service mapping,
 and runtime WAN selection remain board-specific.
 
+## Dual-PPE capability versus live operation
+
+The checked-in ImmortalWrt 6.18.52 patch series provides static evidence that
+AN7581 is designed and handled as a two-PPE host platform:
+
+- The EN7581/AN7581 SoC data sets `.num_ppe = 2` in
+  `target/linux/airoha/patches-6.18/155-v7.2-net-airoha-Rename-get_src_port_id-callback-in-get_sp.patch`.
+- PPE setup iterates over `eth->soc->num_ppe` and programs the per-PPE table
+  base, hash seed, and flow configuration in
+  `target/linux/airoha/patches-6.18/920-13-net-airoha-Rework-MTU-configuration.patch`.
+- The SRAM FOE patches select the second PPE window for hashes at or above
+  `PPE_SRAM_NUM_ENTRIES` and clear the calculated total SRAM entries in
+  `099-06`, `099-07`, and `099-08`. ClankerNPU's `npu_ppe.c` independently
+  contains family-14 PPE1 setup/teardown. Upstream commit `735529c` now sizes
+  AN7581's ClankerNPU table to `0x4000` (16,384 total entries), splits at
+  `0x2000`, and routes the upper half to PPE1 only when its control bit is
+  active. These are source/build findings, not live tests.
+
+They do **not** establish that PPE1 is enabled on a particular boot, receives
+flows, or shares traffic with PPE0. The kernel has runtime PPE-enable checks,
+and the actual engine/flow ownership must be observed. In the existing
+XG2010G stock-firmware test, one short flow produced `[HW_OFFLOAD]` and two
+PPE `BND` lines, but those lines were not attributed to PPE0 or PPE1; their
+count cannot prove dual-engine use.
+
+| Claim | Evidence available | Status |
+|---|---|---|
+| AN7581 host driver supports two PPE instances | `.num_ppe = 2` and per-instance setup loop in the source patch series | Source-confirmed |
+| ClankerNPU AN7581 FOE sizing and PPE1 window routing | Commit `735529c`; local AN7581 NOWIFI build succeeds | Source/build-confirmed; not boot-tested |
+| PPE0 and PPE1 were both enabled on the stock 1456.62 XG2010G boot | No engine-specific register/debugfs snapshot retained | Unknown |
+| A live test flow used each PPE, or both handled traffic concurrently | BND lines lack recorded engine attribution/counter deltas | Not proven |
+
+The read-only `scripts/offload-snapshot.sh` collector records the raw
+`ppe0_flow_cfg` / `ppe1_flow_cfg`, table configuration, GDM2 default CPU-port
+selection, and global forwarding selectors exposed by `/sys/kernel/debug/ppe/config`.
+Capture it at idle and during a uniquely identified test flow. These values
+show configuration snapshots only; decode register bits against the exact
+kernel revision, and do not treat two BND rows as proof of two active engines.
+
+The 8192 + 8192 table layout is a **capacity/table-routing** property, not a
+throughput multiplier and not an enable switch. For runtime acceptance, collect
+the driver's per-engine enable/config state and either an engine-attributed
+FOE index or distinct PPE0/PPE1 hit/packet counters before and during uniquely
+identified flows. Then repeat with concurrent flows and, separately, each
+mwan3-selected WAN. Do not infer engine ownership from the number of `BND`
+lines or from total table capacity.
+
 ## Validation levels
 
 | Level | Evidence | Current result |
@@ -37,6 +84,7 @@ and runtime WAN selection remain board-specific.
 | Device identity | Device-tree compatibles and raw SoC ID reads | Collected on all three boards in the field record. |
 | Stock host/firmware integration | Linux NPU driver probes and reports 1456.62 | Observed on all three boards. |
 | Static Clanker capability match | Family/revision is represented in `chip_cap_query()` | Yes for revision 2 and revision 6. |
+| ClankerNPU firmware/PBS05 test image | AN7581 NOWIFI compile, package hash match, isolated 040GMD initramfs FIT, FIT/profile/checksum validation | Build/package/image verified; not boot-tested and no sysupgrade image. |
 | ClankerNPU boot/ABI | Live test with ClankerNPU and host-driver logs | Not yet demonstrated on any of the three boards. |
 | PPE routed offload | Exact live flow correlates with hardware bind/counters and measured forwarding | One transient stock-firmware XG2010G flow observed; stable coverage not established. |
 | Native bridge / IPTV multicast | Per-path live counters and traffic across the actual interfaces | Not accepted yet; see the deployment validation record. |
@@ -52,3 +100,5 @@ permission to write memory from a shell or another host component.
 
 For board roles, optical state, port mapping and current test evidence, see
 [AN7581 deployment validation](an7581-deployment-validation.md).
+Firmware loading and the PBS05/L2B update audit are recorded in
+[PBS05 firmware and NPU integration notes](pbs05-npu-integration.md).

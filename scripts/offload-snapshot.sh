@@ -59,7 +59,7 @@ nft list table inet fw4 2>/dev/null | awk '
 
 if [ -r /sys/kernel/debug/ppe/config ]; then
 	printf 'ppe_config:\n'
-	grep -E '^(npu_attached|gdm2_fwd_cfg|fe_(wan_port|vip_port_en|ifc_port_en)|ppe[01]_(flow_cfg|table_cfg|gdm2_default_cpu_port)):' \
+	grep -E '^(npu_attached|gdm2_fwd_cfg|fe_(wan_port|vip_port_en|ifc_port_en)|ppe[01]_(enabled|flow_cfg|table_cfg|gdm2_default_cpu_port)):' \
 		/sys/kernel/debug/ppe/config
 fi
 
@@ -125,3 +125,4 @@ for zone in /sys/class/thermal/thermal_zone*; do
 	temp=$(cat "$zone/temp" 2>/dev/null || printf '?')
 	printf 'thermal %s millidegC=%s\n' "${zone##*/}" "$temp"
 done
+

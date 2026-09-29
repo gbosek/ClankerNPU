@@ -35,7 +35,7 @@ bridge and IPTV multicast are separate flow classes and need separate proof.
 | Phase | Work and exit evidence | Current state |
 |---|---|---|
 | 0. Baseline and safety | Record board/firmware hashes, port map, stock NPU version, temperatures, recovery method and read-only snapshots. Keep the vendor 1456.62 image as the comparison baseline. | Most device identity and stock-NPU data are recorded; MD recovery is unresolved. |
-| 1. Generic profile and ABI | Build `AN7581_NOWIFI`; verify chip-capability entries, version-query mailbox behavior, PPE mailbox layouts and linker/memory bounds. | Version query and function-4 setup build are present; PPE handlers now validate the host's byte-counted payload lengths. Runtime ABI is not yet proven. |
+| 1. Generic profile and ABI | Build `AN7581_NOWIFI`; verify chip-capability entries, version-query mailbox behavior, PPE mailbox layouts and linker/memory bounds. | Version query and function-4 handler build are present; PPE handlers validate the host's byte-counted payload lengths. The current PBS05 diagnostic FIT has flow stats disabled, so function 4 is not exercised there. Runtime ABI remains unproven. |
 | 2. Recoverable NPU bring-up | On a spare board with a demonstrated RAM-boot/recovery route, verify firmware load, real hart liveness, traps, mailbox replies and PPE initialization. | Blocked until MD recovery and a second traffic endpoint are available. |
 | 3. Single-WAN routed baseline | On XG2010G, repeat IPv4/IPv6 PPPoE forwarding tests; correlate the exact test flow with conntrack `[HW_OFFLOAD]`, PPE BND/bind evidence, throughput, CPU and temperature. | One short flow showed hardware-offload evidence; repeatability and coverage remain open. |
 | 4. Native L2 bridge | Validate the 930 native-L2B driver fix with a second physical host. Check learned nonzero MACs, BND state, bind/TC evidence and traffic crossing the bridge. | Fix is in the r16 source/image; live bridge acceptance is open. The driver intentionally has no verified BRIDGE packet counter. |
@@ -104,3 +104,4 @@ bridge and IPTV multicast are separate flow classes and need separate proof.
 - [Detailed deployment, field evidence and validation gates](an7581-deployment-validation.md)
 - [Generic AN7581 NOWIFI profile](an7581-nowifi.md)
 - [Mailbox ABI notes](mailbox.md)
+

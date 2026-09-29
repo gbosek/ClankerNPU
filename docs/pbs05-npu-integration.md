@@ -105,3 +105,26 @@ The bridge-flowtable update is relevant to the requested L2 bridge testing;
 the native L2B patch is relevant to LAN-to-LAN forwarding. Neither changes
 the stock 1456.62 NPU firmware, enables both PPEs by itself, nor implements
 PON/IPTV multicast replication.
+
+## PPE-enable diagnostic rebuild (2026-09-29)
+
+The isolated PBS05 build tree adds `ppe0_enabled` and `ppe1_enabled` to
+`/sys/kernel/debug/ppe/config`, using the driver's existing
+`airoha_ppe_is_enabled(eth, i)` helper (the per-engine `PPE_GLO_CFG` enable
+bit). The read-only `scripts/offload-snapshot.sh` collector now records both
+fields. Linux 6.18.52 `target/linux/compile` and `target/linux/install`
+completed, and the MD-only initramfs FIT was rebuilt and structurally checked:
+
+```text
+ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-clanker-test-initramfs.itb
+SHA-256: DB217444339B593FC075326A2AE21C66A40911B57FD65E860A7EFD721E4D6538
+```
+
+The artifact is in the local `artifacts/pbs05-an7581-clanker-test-2026-09-29-ppe-diag/`
+directory. Its resolved kernel configuration has
+`# CONFIG_NET_AIROHA_FLOW_STATS is not set`, so this image does not exercise
+the function-4 flow-statistics handshake. The enable flags also prove only
+engine enablement, not flow ownership or traffic handling. The FIT has not
+been booted; no router was modified, and the existing stock 1456.62 image
+remains the baseline.
+

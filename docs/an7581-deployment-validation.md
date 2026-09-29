@@ -134,6 +134,13 @@ proof. A short speed result is not a thermal or stability qualification.
   from accidental linker-layout changes. The AN7581 target kernel config in the XG2010G
   build tree enables flow stats, but the running devices do not expose
   `/proc/config.gz`, so their compiled setting is not yet proven.
+  The current PBS05 040GMD diagnostic FIT is a separate build: its resolved
+  Linux 6.18.52 `.config` explicitly has
+  `# CONFIG_NET_AIROHA_FLOW_STATS is not set`. That image therefore does not
+  call the host's function-4 `FLOW_STATS_SETUP` handshake and cannot validate
+  that ABI. Keep the current FIT's result scoped to kernel build and PPE
+  enable-state observability; a separate recoverable test build must enable
+  flow stats before function 4 can be exercised.
   **This is initialization compatibility only:** ClankerNPU does not yet
   maintain the NPU-side counter words. The host mapping, PPE writes,
   reported counter values, memory lifetime and cache behavior all need
@@ -254,3 +261,4 @@ Next: establish a recoverable RAM-boot path for MD, attach a second
 traffic endpoint, recheck temperature, then verify Clanker mailbox,
 hart/trap telemetry, PPE setup and real forwarded flows. Continue with
 TF IPTV egress and XG2010G Unicom PON only when those links are present.
+

@@ -134,6 +134,14 @@ either counter half is being updated or that flow-statistics values are valid.
 verified per-flow counter producer; do not treat the host-visible counters as
 live traffic statistics.
 
+The PBS05 Airoha host debugfs snapshot has `ppe0_enabled` and
+`ppe1_enabled` fields, each obtained from the same `airoha_ppe_is_enabled()`
+helper used by the driver. These are engine-enable state only. They do not
+identify which PPE owns a flow or prove that a flow traversed that PPE; use
+engine-attributed FOE evidence or separate hit counters for that claim. The
+updated debugfs fields are compiled into the local 040GMD initramfs test FIT,
+but that FIT has not been booted on hardware.
+
 The `FSTA` object is six 32-bit words. The new field is appended so the
 existing five offsets remain unchanged:
 
@@ -558,3 +566,4 @@ the top three bits for `sys memory`.
 **How do I read memory the host cannot map?**
 `COPY` with the NPU address and a length, then
 `sys memory 1e907400 <length>`. For one word, `READ`.
+

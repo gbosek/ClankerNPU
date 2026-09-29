@@ -62,12 +62,18 @@ count cannot prove dual-engine use.
 | PPE0 and PPE1 were both enabled on the stock 1456.62 XG2010G boot | No engine-specific register/debugfs snapshot retained | Unknown |
 | A live test flow used each PPE, or both handled traffic concurrently | BND lines lack recorded engine attribution/counter deltas | Not proven |
 
-The read-only `scripts/offload-snapshot.sh` collector records the raw
-`ppe0_flow_cfg` / `ppe1_flow_cfg`, table configuration, GDM2 default CPU-port
-selection, and global forwarding selectors exposed by `/sys/kernel/debug/ppe/config`.
-Capture it at idle and during a uniquely identified test flow. These values
-show configuration snapshots only; decode register bits against the exact
-kernel revision, and do not treat two BND rows as proof of two active engines.
+The PBS05 debugfs source now exposes `ppe0_enabled` / `ppe1_enabled` using the
+same `airoha_ppe_is_enabled()` check the host datapath uses for
+`PPE_GLO_CFG(i) & PPE_GLO_CFG_EN_MASK`. This change compiled into the new
+040GMD-only initramfs FIT (SHA-256
+`DB217444339B593FC075326A2AE21C66A40911B57FD65E860A7EFD721E4D6538`), but
+that FIT has not been booted. The read-only `scripts/offload-snapshot.sh`
+collector captures these flags together with the raw per-engine flow/table
+configuration, GDM2 CPU-port selection, and global forwarding selectors.
+Capture them at idle and during a uniquely identified test flow. An enabled
+bit proves engine enablement only; actual flow use still requires
+engine-attributed FOE ownership or distinct per-engine hit/packet counters.
+Do not treat two BND rows as proof of two active engines.
 
 The 8192 + 8192 table layout is a **capacity/table-routing** property, not a
 throughput multiplier and not an enable switch. For runtime acceptance, collect
@@ -102,3 +108,4 @@ For board roles, optical state, port mapping and current test evidence, see
 [AN7581 deployment validation](an7581-deployment-validation.md).
 Firmware loading and the PBS05/L2B update audit are recorded in
 [PBS05 firmware and NPU integration notes](pbs05-npu-integration.md).
+

@@ -116,11 +116,29 @@ file. Convert the address to host view before reading it.
 | `BRDG` | variable holding the NPU bridge buffer address |
 | `TUNF` | tunnel mail handler table |
 | `L4SE` | L4S enable flag |
+| `FOES` | NPU-side FOE flow-statistics window returned by `FLOW_STATS_SETUP` |
+| `FSTA` | `struct npu_flow_stats_setup_state`: handshake and mapped-window metadata |
 | `EDBG` | eagle datapath counters, `struct eagle_dbg` in `npu_wifi.h` |
 | `SQLM` | eagle per-station queue limit, `struct wifi_sta_q`: limit, target, interval, the two drop counts, then delay, min_q and small ([sta-qlimit.md](sta-qlimit.md#settings)) |
 | `KFLG` | kite debug flags: bit 2 turns the kite counter blocks on |
 | `KC2G`, `KC5G` | variables holding the kite 2.4 GHz and 5 GHz counter block addresses |
 | `PROF` | profile block, `PROF=1` builds only ([Profiling](#profiling)) |
+
+For PPE status (`NDBG_PPE`), the text status also prints the flow-statistics
+setup flag, host DMA address, NPU window address/size, and window capacity.
+`setup_complete=1` means only that the firmware accepted the mailbox request,
+zeroed the NPU window, and returned its address. It does **not** mean that
+either counter half is being updated or that flow-statistics values are valid.
+
+The `FSTA` object is five 32-bit words:
+
+| offset | field |
+|---:|---|
+| `+0x00` | `setup_complete` (`1` means the setup handler completed) |
+| `+0x04` | `host_dma_addr` supplied by Linux |
+| `+0x08` | `npu_window_addr` returned to Linux |
+| `+0x0C` | `npu_window_bytes` cleared by the handler |
+| `+0x10` | `npu_window_capacity` in 8-byte entries |
 
 ### Counters
 

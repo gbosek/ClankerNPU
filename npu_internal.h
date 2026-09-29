@@ -715,6 +715,17 @@ extern char __npu_stats_base[], __npu_stats_size[];
 #define NPU_FOE_STATS_ADDR	((u32)(unsigned long)__npu_stats_base)
 #define NPU_FOE_STATS_SIZE	((u32)(unsigned long)__npu_stats_size)
 
+/* FLOW_STATS_SETUP handshake telemetry; it does not claim live counters. */
+struct npu_flow_stats_setup_state {
+	u32 setup_complete;
+	u32 host_dma_addr;
+	u32 npu_window_addr;
+	u32 npu_window_bytes;
+	u32 npu_window_capacity;
+};
+
+extern volatile struct npu_flow_stats_setup_state npu_flow_stats_setup;
+
 /* ================================================================
  * Field debug block: fixed SRAM window the host reads and writes
  * with sys memrl / memwl at NDBG_BASE & 0x1FFFFFFF. See docs/debug.md.

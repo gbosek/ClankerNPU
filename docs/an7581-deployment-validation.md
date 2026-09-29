@@ -136,6 +136,9 @@ proof. A short speed result is not a thermal or stability qualification.
   maintain the NPU-side counter words. The host mapping, PPE writes,
   reported counter values, memory lifetime and cache behavior all need
   on-board verification. Do not use these counters as offload proof yet.
+  The NDBG `FSTA` symbol and `NDBG_PPE` status line expose the setup result
+  and the two buffer addresses for that later read-only verification; a
+  successful setup still is not evidence of live packet/byte accounting.
   A recoverable **test** kernel with flow stats disabled can still
   isolate basic PPE compatibility without validating NPU flow statistics.
 - XG2010G bridge L2 binding and PON offload host-driver fixes have

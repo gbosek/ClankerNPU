@@ -909,10 +909,13 @@ static int sram_set_entry_to_zero(u32 size)
  *     airoha_ppe_foe_flow_stat_entry_reset() -> memset_io(&npu->stats[i], 0, 8)
  *     airoha_ppe_foe_entry_get_stats()       -> memcpy_fromio(&s, &npu->stats[i], 8)
  *
- * A 64-bit counter is assembled from two halves: the high 32 bits come from
- * the host's coherent buffer at foe_stats_addr (filled by the PPE), the low
- * 32 bits from this window:
+ * The host assembles a 64-bit counter from two halves: it reads the high
+ * 32 bits from its coherent buffer at foe_stats_addr and the low 32 bits
+ * from this window:
  *     stats.packets = ppe->foe_stats[i].packets << 32 | npu_stats.packets;
+ * This describes the host's read path, not the producer of either half.
+ * The producer and update semantics still need to be verified against the
+ * firmware/hardware path on a board.
  *
  * So the window must be real DRAM the host can both write and read; handing
  * back a fake address would have the host memset_io/memcpy_fromio somewhere
@@ -921,28 +924,32 @@ static int sram_set_entry_to_zero(u32 size)
  * What this version does and does not do:
  *   - publishes a reserved, zeroed window inside the NPU's own DRAM
  *     (NPU_FOE_STATS_ADDR, see link.ld) and records the host buffer address
- *   - it does NOT yet populate the low 32 bits. The host zeroes the window
- *     itself on every flow commit, so until the PPE counter plumbing is
- *     verified on hardware the window reads back as zeros, which the host
- *     reports as a low half of 0 rather than as an error.
+ *     plus window metadata for NDBG inspection
+ *   - it does NOT yet update the low 32-bit words or configure a producer
+ *     for the host-side DMA buffer. Linux zeroes both buffers when resetting
+ *     a flow; subsequent counter values remain unverified.
  *   - deliberately does not return a fabricated address or a fake buffer
  *     just to make the initialisation pass.
  *
- * The state below is carried for the follow-up counter plumbing; while
- * nothing reads it yet the compiler is free to elide it. What proves the
- * handler ran on a live board is the shared debug block, which
- * hwnat_mail_dispatch() updates for every call:
+ * The shared debug block records the setup state and the mailbox dispatcher
+ * records every call:
  *     NC_PPE_LAST = func_id << 8 | result   ->  0x0401 on success
+ *     NDBG symbol FSTA -> npu_flow_stats_setup
  *     NDBG_TRACE(NDBG_PPE, 4, 1, published_window_address)
  */
-static u32 hwnat_foe_stats_foe_addr;	/* host coherent buffer, PPE side */
-static u32 hwnat_foe_stats_entries;
-static u32 hwnat_foe_stats_ready;
+volatile struct npu_flow_stats_setup_state npu_flow_stats_setup;
 
 static int hwnat_set_wait_flow_stats(u32 addr)
 {
 	u32 foe_addr = REG32(addr + 12);
 	u32 i, words = NPU_FOE_STATS_SIZE / 4;
+
+	npu_flow_stats_setup.setup_complete = 0;
+	npu_flow_stats_setup.host_dma_addr = foe_addr;
+	npu_flow_stats_setup.npu_window_addr = NPU_FOE_STATS_ADDR;
+	npu_flow_stats_setup.npu_window_bytes = NPU_FOE_STATS_SIZE;
+	npu_flow_stats_setup.npu_window_capacity = NPU_FOE_STATS_SIZE / 8;
+	npu_barrier();
 
 	/* Publish the window the host will ioremap. */
 	REG32(addr + 8) = NPU_FOE_STATS_ADDR;
@@ -958,9 +965,9 @@ static int hwnat_set_wait_flow_stats(u32 addr)
 		REG32(NPU_FOE_STATS_ADDR + (i << 2)) = 0;
 	npu_barrier();
 
-	hwnat_foe_stats_foe_addr = foe_addr;
-	hwnat_foe_stats_entries = NPU_FOE_STATS_SIZE / 8;
-	hwnat_foe_stats_ready = 1;
+	/* Publish last: this means setup completed, not that counters are live. */
+	npu_flow_stats_setup.setup_complete = 1;
+	npu_barrier();
 	return 1;
 }
 

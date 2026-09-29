@@ -70,6 +70,8 @@ void npu_dbg_init(void)
 	ndbg_sym(i++, NDBG_TAG('L', '4', 'S', 'E'), (u32)&tunnel_ecn_enabled);
 	/* FOE flow-stats window the host ioremaps after FLOW_STATS_SETUP */
 	ndbg_sym(i++, NDBG_TAG('F', 'O', 'E', 'S'), NPU_FOE_STATS_ADDR);
+	ndbg_sym(i++, NDBG_TAG('F', 'S', 'T', 'A'),
+		 (u32)&npu_flow_stats_setup);
 #endif
 #ifdef WIFI_EAGLE
 	ndbg_sym(i++, NDBG_TAG('E', 'D', 'B', 'G'), (u32)&dbg);
@@ -174,9 +176,17 @@ static void ndbg_status(u32 mask)
 			   l4s_qlen_thresh, ndbg->cnt[NC_L4S_PKTS],
 			   ndbg->cnt[NC_L4S_MARKS], ndbg->cnt[NC_L4S_QLEN]);
 #endif
-	if (mask & (1u << NDBG_PPE))
+	if (mask & (1u << NDBG_PPE)) {
 		npu_printf("[DBG] ppe mails %d last %x\n",
 			   ndbg->cnt[NC_PPE_MAILS], ndbg->cnt[NC_PPE_LAST]);
+		npu_printf("[DBG] flowstats setup %d host_dma %x "
+			   "npu_window %x bytes %x capacity %d\n",
+			   npu_flow_stats_setup.setup_complete,
+			   npu_flow_stats_setup.host_dma_addr,
+			   npu_flow_stats_setup.npu_window_addr,
+			   npu_flow_stats_setup.npu_window_bytes,
+			   npu_flow_stats_setup.npu_window_capacity);
+	}
 #ifdef HAS_DBA
 	if (mask & (1u << NDBG_DBA))
 		npu_printf("[DBG] dba mails %d frames %d\n",

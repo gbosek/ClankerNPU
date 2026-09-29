@@ -77,6 +77,35 @@ whether a bridge or multicast packet uses a separate hardware path.
    board, traffic mix and physical links. Use rollback if mailbox,
    forwarding, IPTV or temperature regresses.
 
+### First ClankerNPU RAM-boot acceptance gate
+
+After a recoverable 040GMD RAM boot, run
+`scripts/clanker-boot-snapshot.sh` before generating traffic. The script is
+read-only: it reads the NDBG SRAM block with `devmem`, takes two heartbeat
+samples two seconds apart, checks the exact CI firmware hashes and build ID,
+scans the bounded NPU boot log, and reads the per-PPE enable bits exposed by
+the diagnostic kernel. It does not alter UCI, routes, flash, firmware memory,
+PPE tables or NDBG command fields.
+
+The first boot passes only when all of these are true:
+
+- Linux reports `NPU fw version: 7.8`, not the stock `1456.62`.
+- NDBG magic is present and the build ID is exactly
+  `TLB7.8.0.0_v003.NOWIFI.da0d0dc`.
+- NDBG reports eight harts; every loop tag is nonzero, every heartbeat changes
+  across the two samples, and every trap count remains zero.
+- There is no NPU firmware probe failure or host mailbox timeout.
+- The embedded RV32/data files match the CI SHA-256 values.
+- `ppe0_enabled` and `ppe1_enabled` are both `1`. These flags prove only that
+  both engines are enabled; they do not prove that either engine processed a
+  test flow.
+
+If debugfs is unavailable, the result is `INCOMPLETE`, not a pass. If any
+firmware, hart, trap or mailbox check fails, stop before traffic testing and
+return to the stock image through the already-validated RAM-boot recovery
+path. Flow ownership, hardware offload, PPPoE, PON and IPTV remain later
+gates even when this first-boot script prints `overall=PASS`.
+
 ## Evidence required for each flow class
 
 | Flow class | Proof to collect | Current status |

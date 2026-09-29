@@ -129,7 +129,9 @@ proof. A short speed result is not a thermal or stability qualification.
   ID 4 and aborts offload setup on failure. The current ClankerNPU source
   now answers this request with a 64 KiB reserved DRAM window at
   `0x84900000`, matching 8,192 entries of 8 bytes, and clears the window
-  before publishing it. The AN7581 target kernel config in the XG2010G
+  before publishing it. CI now checks the linked base and size against
+  `0x84900000` and `0x10000`, protecting the two-PPE / 8,192-entry host ABI
+  from accidental linker-layout changes. The AN7581 target kernel config in the XG2010G
   build tree enables flow stats, but the running devices do not expose
   `/proc/config.gz`, so their compiled setting is not yet proven.
   **This is initialization compatibility only:** ClankerNPU does not yet

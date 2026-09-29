@@ -37,6 +37,10 @@ jobs:
           make SOC=AN7581 WIFI=NOWIFI disasm
           riscv64-unknown-elf-size build/AN7581_NOWIFI/firmware.elf
           riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf > build/AN7581_NOWIFI/symbols.txt
+          stats_base="$(awk '$3 == "__npu_stats_base" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          stats_size="$(awk '$3 == "__npu_stats_size" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          test "$stats_base" = "84900000"
+          test "$stats_size" = "00010000"
           grep -E ' [Tt] core7_main$' build/AN7581_NOWIFI/symbols.txt
           grep -E ' [Tt] nowifi_mail_dispatch$' build/AN7581_NOWIFI/symbols.txt
           grep -E ' [Tt] hwnat_mail_dispatch$' build/AN7581_NOWIFI/symbols.txt
@@ -59,6 +63,10 @@ jobs:
           make clean
           make an7581-nowifi
           riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf > build/AN7581_NOWIFI/symbols.txt
+          stats_base="$(awk '$3 == "__npu_stats_base" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          stats_size="$(awk '$3 == "__npu_stats_size" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          test "$stats_base" = "84900000"
+          test "$stats_size" = "00010000"
           strings build/AN7581_NOWIFI/npu_rv32.bin > build/AN7581_NOWIFI/strings.txt
           sha256sum             build/AN7581_NOWIFI/npu_rv32.bin             build/AN7581_NOWIFI/npu_data.bin             > build/AN7581_NOWIFI/SHA256SUMS
 

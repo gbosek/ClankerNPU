@@ -199,3 +199,4 @@ Feature flags from `npu_config.h`:
 | [docs/debug.md](docs/debug.md) | field debug block: layout, commands, traces, troubleshooting flow and FAQ |
 | [docs/errata.md](docs/errata.md) | vendor firmware defects and how this firmware handles them |
 | [docs/an7581-deployment-validation.md](docs/an7581-deployment-validation.md) | three-board topology, live test evidence, deployment gates and work log |
+| [docs/workbuddy-handoff-2026-09-29.md](docs/workbuddy-handoff-2026-09-29.md) | WorkBuddy-to-Codex handoff, PPPoE offload evidence conflict, and corrected test requirements |

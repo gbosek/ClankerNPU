@@ -945,6 +945,7 @@ static int hwnat_set_wait_flow_stats(u32 addr)
 	u32 i, words = NPU_FOE_STATS_SIZE / 4;
 
 	npu_flow_stats_setup.setup_complete = 0;
+	npu_flow_stats_setup.counter_producer_registered = 0;
 	npu_flow_stats_setup.host_dma_addr = foe_addr;
 	npu_flow_stats_setup.npu_window_addr = NPU_FOE_STATS_ADDR;
 	npu_flow_stats_setup.npu_window_bytes = NPU_FOE_STATS_SIZE;

@@ -125,12 +125,17 @@ file. Convert the address to host view before reading it.
 | `PROF` | profile block, `PROF=1` builds only ([Profiling](#profiling)) |
 
 For PPE status (`NDBG_PPE`), the text status also prints the flow-statistics
-setup flag, host DMA address, NPU window address/size, and window capacity.
+setup flag, counter-producer registration flag, host DMA address, NPU window
+address/size, and window capacity.
 `setup_complete=1` means only that the firmware accepted the mailbox request,
 zeroed the NPU window, and returned its address. It does **not** mean that
 either counter half is being updated or that flow-statistics values are valid.
+`counter_producer_registered=0` explicitly reports that this firmware has no
+verified per-flow counter producer; do not treat the host-visible counters as
+live traffic statistics.
 
-The `FSTA` object is five 32-bit words:
+The `FSTA` object is six 32-bit words. The new field is appended so the
+existing five offsets remain unchanged:
 
 | offset | field |
 |---:|---|
@@ -139,6 +144,7 @@ The `FSTA` object is five 32-bit words:
 | `+0x08` | `npu_window_addr` returned to Linux |
 | `+0x0C` | `npu_window_bytes` cleared by the handler |
 | `+0x10` | `npu_window_capacity` in 8-byte entries |
+| `+0x14` | `counter_producer_registered` (`0` in the current firmware) |
 
 ### Counters
 

@@ -722,6 +722,7 @@ struct npu_flow_stats_setup_state {
 	u32 npu_window_addr;
 	u32 npu_window_bytes;
 	u32 npu_window_capacity;
+	u32 counter_producer_registered;
 };
 
 extern volatile struct npu_flow_stats_setup_state npu_flow_stats_setup;

@@ -179,9 +179,10 @@ static void ndbg_status(u32 mask)
 	if (mask & (1u << NDBG_PPE)) {
 		npu_printf("[DBG] ppe mails %d last %x\n",
 			   ndbg->cnt[NC_PPE_MAILS], ndbg->cnt[NC_PPE_LAST]);
-		npu_printf("[DBG] flowstats setup %d host_dma %x "
-			   "npu_window %x bytes %x capacity %d\n",
+		npu_printf("[DBG] flowstats setup %d producer_registered %d "
+			   "host_dma %x npu_window %x bytes %x capacity %d\n",
 			   npu_flow_stats_setup.setup_complete,
+			   npu_flow_stats_setup.counter_producer_registered,
 			   npu_flow_stats_setup.host_dma_addr,
 			   npu_flow_stats_setup.npu_window_addr,
 			   npu_flow_stats_setup.npu_window_bytes,

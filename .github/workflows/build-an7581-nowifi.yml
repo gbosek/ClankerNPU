@@ -46,6 +46,7 @@ jobs:
           grep -E ' [Tt] hwnat_mail_dispatch$' build/AN7581_NOWIFI/symbols.txt
           grep -E ' [BD] npu_flow_stats_setup$' build/AN7581_NOWIFI/symbols.txt
           strings build/AN7581_NOWIFI/npu_rv32.bin > build/AN7581_NOWIFI/strings.txt
+          grep -q 'producer_registered' build/AN7581_NOWIFI/strings.txt
 
       - name: Verify generic profile wiring
         shell: bash
@@ -68,6 +69,7 @@ jobs:
           test "$stats_base" = "84900000"
           test "$stats_size" = "00010000"
           strings build/AN7581_NOWIFI/npu_rv32.bin > build/AN7581_NOWIFI/strings.txt
+          grep -q 'producer_registered' build/AN7581_NOWIFI/strings.txt
           sha256sum             build/AN7581_NOWIFI/npu_rv32.bin             build/AN7581_NOWIFI/npu_data.bin             > build/AN7581_NOWIFI/SHA256SUMS
 
       - name: Upload firmware artifact

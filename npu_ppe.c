@@ -924,8 +924,9 @@ static int sram_set_entry_to_zero(u32 size)
  *     }
  *
  * so answering failure here means the PPE never binds to the NPU and no
- * flow is ever offloaded. The target config for an7581 sets the option to
- * y, so this handler has to succeed before ClankerNPU can be tried at all.
+ * flow is ever offloaded. The host sends this function only when
+ * CONFIG_NET_AIROHA_FLOW_STATS=y; target config fragments may explicitly
+ * disable it, in which case this setup callback is not reached.
  *
  * Message layout (struct ppe_mbox_data, 28 bytes, see airoha_npu.c):
  *     +0  func_type                NPU_OP_SET (1)
@@ -1130,3 +1131,4 @@ int hwnat_mail_dispatch(u32 base, u32 cnt)
 }
 
 #endif /* HAS_TUNNEL */
+

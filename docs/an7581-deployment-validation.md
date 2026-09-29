@@ -141,6 +141,14 @@ proof. A short speed result is not a thermal or stability qualification.
   that ABI. Keep the current FIT's result scoped to kernel build and PPE
   enable-state observability; a separate recoverable test build must enable
   flow stats before function 4 can be exercised.
+  **Source-level size cross-check (PBS05 Linux 6.18.52):**
+  `PPE_STATS_NUM_ENTRIES` is 4,096 per PPE, `en7581_soc_data.num_ppe` is 2,
+  and `struct airoha_foe_stats` is two 32-bit words. The host therefore passes
+  8,192 entries and maps 65,536 bytes, exactly the size ClankerNPU advertises.
+  The target Kconfig defaults the option on, but PBS05's AN7581 config fragment
+  explicitly turns it off; the resolved `.config` confirms the fragment wins.
+  This proves the size arithmetic only, not unique coverage of every FOE hash
+  or valid counter production.
   **This is initialization compatibility only:** ClankerNPU does not yet
   maintain the NPU-side counter words. The host mapping, PPE writes,
   reported counter values, memory lifetime and cache behavior all need

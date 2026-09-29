@@ -58,6 +58,7 @@ count cannot prove dual-engine use.
 | Claim | Evidence available | Status |
 |---|---|---|
 | AN7581 host driver supports two PPE instances | `.num_ppe = 2` and per-instance setup loop in the source patch series | Source-confirmed |
+| ClankerNPU init requests both PPEs enabled for chip family 14 | `hwnat_init()` sets bit 0 in `PPE0_CTRL` and, for family 14, `PPE1_CTRL`; these map to the host PPE global-config enable bits | Source-confirmed; runtime state still unknown |
 | ClankerNPU AN7581 FOE sizing and PPE1 window routing | Commit `735529c`; local AN7581 NOWIFI build succeeds | Source/build-confirmed; not boot-tested |
 | PPE0 and PPE1 were both enabled on the stock 1456.62 XG2010G boot | No engine-specific register/debugfs snapshot retained | Unknown |
 | A live test flow used each PPE, or both handled traffic concurrently | BND lines lack recorded engine attribution/counter deltas | Not proven |

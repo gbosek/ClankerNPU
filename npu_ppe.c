@@ -994,21 +994,31 @@ static int hwnat_set_wait_api(u32 addr)
 	return 1;
 }
 
+enum {
+	PPE_MBOX_HEADER_SIZE = 2 * sizeof(u32),
+	PPE_MBOX_INIT_SIZE = 28,
+	PPE_MBOX_API_SIZE = 5 * sizeof(u32),
+	PPE_MBOX_STATS_SIZE = 4 * sizeof(u32),
+};
+
 int hwnat_mail_dispatch(u32 base, u32 cnt)
 {
 	u32 addr = (base & 0x3FFFFFFF) | NPU_ADDR_MASK;
-	u32 func_type = *(volatile u32 *)addr;
-	u32 func_id;
+	u32 func_type, func_id, required_len, trace_arg;
 	int result;
 
-	(void)cnt;
-	if (func_type != 1) {
-		u32 i;
+	/* CTRL1 carries the payload length in bytes. Do not inspect a header
+	 * unless both header words are present and DWORD-aligned.
+	 */
+	if (cnt < PPE_MBOX_HEADER_SIZE || (cnt & (sizeof(u32) - 1))) {
+		npu_printf("invalid PPE mailbox header length=%u\n", cnt);
+		return 0;
+	}
 
-		npu_printf("not support unknow funcType\n");
-		for (i = 0; i < 7; i++)
-			npu_printf("Offset: %08zx, Value: 0x%08x\n",
-				   i * 4, *(volatile u32 *)(addr + i * 4));
+	func_type = *(volatile u32 *)addr;
+	if (func_type != 1) {
+		npu_printf("unsupported PPE funcType=%u len=%u\n",
+			   func_type, cnt);
 		return 0;
 	}
 
@@ -1016,6 +1026,36 @@ int hwnat_mail_dispatch(u32 base, u32 cnt)
 	if (func_id < 1 || func_id > 5) {
 		npu_printf("Error: invalid funcId! hwnat_mail_data->funcType=%u hwnat_mail_data->funcId=%u\n",
 			   func_type, func_id);
+		return 0;
+	}
+
+	/* The current Linux host sends sizeof(struct ppe_mbox_data) == 28
+	 * bytes for every operation. Keep the checks tied to the fields each
+	 * handler actually accesses, so short or malformed messages fail closed.
+	 */
+	switch (func_id) {
+	case 1: /* HWNAT_INIT reads through +24 */
+		required_len = PPE_MBOX_INIT_SIZE;
+		break;
+	case 2: /* HWNAT_DEINIT only consumes the two-word header */
+	case 5: /* legacy L4S acknowledgement only consumes the header */
+		required_len = PPE_MBOX_HEADER_SIZE;
+		break;
+	case 3: /* API reads data through +16 */
+		required_len = PPE_MBOX_API_SIZE;
+		break;
+	case 4: /* FLOW_STATS_SETUP reads the address at +12 */
+		required_len = PPE_MBOX_STATS_SIZE;
+		break;
+	default:
+		return 0;
+	}
+	if (cnt < required_len) {
+		npu_printf("short PPE mailbox: funcId=%u len=%u need=%u\n",
+			   func_id, cnt, required_len);
+		NDBG_CNT(NC_PPE_MAILS);
+		NDBG_SET(NC_PPE_LAST, func_id << 8);
+		NDBG_TRACE(NDBG_PPE, func_id, 0, cnt);
 		return 0;
 	}
 
@@ -1040,9 +1080,11 @@ int hwnat_mail_dispatch(u32 base, u32 cnt)
 		break;
 	}
 
+	trace_arg = cnt >= 3 * sizeof(u32) ?
+		*(volatile u32 *)(addr + 8) : 0;
 	NDBG_CNT(NC_PPE_MAILS);
 	NDBG_SET(NC_PPE_LAST, func_id << 8 | (result & 0xFF));
-	NDBG_TRACE(NDBG_PPE, func_id, result, *(volatile u32 *)(addr + 8));
+	NDBG_TRACE(NDBG_PPE, func_id, result, trace_arg);
 	if (result == 0)
 		npu_printf("hwnat_mail_set_wait_operation fail !\n");
 	return result;

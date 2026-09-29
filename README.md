@@ -116,7 +116,7 @@ make SOC=AN7583 WIFI=MT7993 disasm # build/<variant>/firmware.dis
 
 Outputs remain in `build/<SOC>_<WIFI>/`. The generic AN7581 no-WiFi image is written to `build/AN7581_NOWIFI/`.
 
-The `AN7581_NOWIFI` variant is intentionally board-neutral. It keeps the existing AN7581 PPE/HWNAT/tunnel behavior and disables only the NPU WiFi datapath. Ethernet/PON topology, WAN selection and bearer mapping remain host-driver/runtime responsibilities rather than being hard-coded for a particular product. See [docs/an7581-nowifi.md](docs/an7581-nowifi.md).
+The `AN7581_NOWIFI` variant is intentionally board-neutral. It keeps the existing AN7581 PPE/HWNAT/tunnel behavior and disables only the NPU WiFi datapath. Ethernet/PON topology, WAN selection and bearer mapping remain host-driver/runtime responsibilities rather than being hard-coded for a particular product. See [docs/an7581-nowifi.md](docs/an7581-nowifi.md), the [project charter](docs/an7581-project-charter.md), and the [three-board compatibility matrix](docs/compatibility-matrix.md).
 
 Outputs:
 

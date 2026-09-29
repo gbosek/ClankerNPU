@@ -157,15 +157,25 @@ Details are in [tunnel.md](tunnel.md).
 ## HWNAT commands (slot 5)
 
 The buffer is in host DRAM: word 0 function type (must be 1, SET_WAIT),
-word 1 function id.
+word 1 function id. `CTRL1` is a byte count and the current Linux host sends
+the 28-byte `struct ppe_mbox_data` for every operation. The firmware rejects
+messages shorter than the fields the selected operation reads:
+
+| id | minimum bytes | fields used |
+|---:|---:|---|
+| 1 | 28 | board config through `wan_sel` at +24 |
+| 2 | 8 | function type and function id |
+| 3 | 20 | API id, size, and data through +16 |
+| 4 | 16 | NPU stats address and host FOE stats address through +12 |
+| 5 | 8 | function type and function id |
 
 | id | command | returns |
 |---:|---|---|
 | 1 | HWNAT_INIT: store the board config, program the PPE | 1 |
 | 2 | HWNAT_DEINIT: undo the PPE setup | 1 |
 | 3 | API: PPE table entry write, value write or clear | 1 on success |
-| 4 | flow statistics setup | 0 |
-| 5 | L4S setup, prints `L4S not support!!!` | 1 |
+| 4 | flow statistics setup; publishes the stats window | 1 when accepted; low 32-bit counters are not yet populated |
+| 5 | L4S setup; prints `L4S not support!!!` and performs no setup | 1 (legacy acknowledgement only, not proof of L4S support) |
 
 A result of 0 prints `hwnat_mail_set_wait_operation fail !`. Details are
 in [tunnel.md](tunnel.md#ppe-and-hwnat).

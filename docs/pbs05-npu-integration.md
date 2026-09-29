@@ -44,20 +44,27 @@ NAND until firmware loading, mailbox/telemetry, PPE initialization, forwarding,
 and recovery have all been demonstrated.
 
 The test DTS selects those exact paths; the stock names and package remain
-available as the rollback baseline. The latest local `AN7581_NOWIFI` build
-produced a 30,164-byte RV32 binary and a 128-byte data binary (linker use:
-30,164 bytes DRAM and 6,816 bytes SRAM). The linker/statistics and artifact
-hash checks passed. The PBS05 firmware package was rebuilt and installed into
-the assembled test root with hashes matching those binaries. The isolated
-040GMD-only test profile produced and structurally validated this FIT:
+available as the rollback baseline. GitHub Actions run
+[36559144364](https://github.com/gbosek/ClankerNPU/actions/runs/36559144364)
+built commit `da0d0dc7fdd0bf5f83110f7258aecfcaba2fb69f` successfully after the
+complete `npu_ppe.c` was restored. Its artifact contains a 30,672-byte RV32
+binary and a 128-byte data binary with version string
+`TLB7.8.0.0_v003.NOWIFI.da0d0dc`.
+
+The PBS05 test package pins the two CI artifact hashes and fails its build if
+they differ. The package and the 040GMD-only initramfs profile were rebuilt,
+then the two Clanker files were extracted from the kernel-bundled
+`initramfs_data.cpio`; their hashes matched the CI artifact exactly:
 
 ```text
+npu_rv32.bin: 23f17dfd65a324e127a0d6c49a690b9214ee1055d3cbcccc63f920278e1e55ff
+npu_data.bin: a0ca04c5cbec29f05beafc7325d4b981fb001f09bda28c6b18b87dae7989ec6e
 ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-clanker-test-initramfs.itb
-SHA-256: afc0010a4be6ed67810d7236d29a20b6b466c59de44a72943baa3ad81cb74418
+SHA-256: 64b998dddff182b5048163f2c3aebd00af7baee25d16d78ac20ca549e33068a7
 Kernel: Linux 6.18.52; FIT includes the test DTS and kernel-bundled initramfs
 ```
 
-The profile metadata and SHA-256 manifest validate, and the generated DTS
+The profile metadata and SHA-256 manifest validate, and the generated DTB
 contains the two ClankerNPU firmware paths above. This establishes
 build/package/image integration only, not mailbox ABI compatibility, a
 successful device boot, or a recovery path. The profile intentionally emits
@@ -117,10 +124,11 @@ completed, and the MD-only initramfs FIT was rebuilt and structurally checked:
 
 ```text
 ponwrt-airoha-an7581-nokia_xg-040g-md-ubi-clanker-test-initramfs.itb
-SHA-256: DB217444339B593FC075326A2AE21C66A40911B57FD65E860A7EFD721E4D6538
+SHA-256: 64b998dddff182b5048163f2c3aebd00af7baee25d16d78ac20ca549e33068a7
 ```
 
-The artifact is in the local `artifacts/pbs05-an7581-clanker-test-2026-09-29-ppe-diag/`
+The current artifact is in the local
+`artifacts/pbs05-an7581-clanker-test-2026-09-29-da0d0dc-ppe-diag/`
 directory. Its resolved kernel configuration has
 `# CONFIG_NET_AIROHA_FLOW_STATS is not set`, so this image does not exercise
 the function-4 flow-statistics handshake. The enable flags also prove only

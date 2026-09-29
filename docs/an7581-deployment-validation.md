@@ -112,7 +112,7 @@ gates even when this first-boot script prints `overall=PASS`.
 |---|---|---|
 | TF PON-to-2.5G Internet bridge | PON service up, correct VLAN, bound PPE L2 entry with learned MAC, counters increasing while traffic crosses TF | O5 and downstream PPPoE observed; TF bridge PPE binding not proven |
 | TF PON-to-`lan2` IPTV | Correct bridge/MDB and stable playback; for hardware claim, matching multicast replication entry and hardware counters | Multicast ingress observed; `lan2` has no carrier; egress/offload not proven |
-| XG Telecom PPPoE `lan3` to LAN | Correct WAN egress, conntrack `[HW_OFFLOAD]` rather than only `[OFFLOAD]`, PPE bound entry/counters, bidirectional throughput and CPU | Vendor-firmware IPv4 TCP download reached `[HW_OFFLOAD]` and two PPE BND entries during one run; repeat 2 MB sample remained `[OFFLOAD]`, so coverage/stability still open |
+| XG Telecom PPPoE `lan3` to LAN | Correct WAN egress, conntrack `[HW_OFFLOAD]` rather than only `[OFFLOAD]`, PPE bound entry/counters, bidirectional throughput and CPU | Conflicting same-day observations: one 3 MB run reported `[HW_OFFLOAD]` plus two BND entries; later snapshots reported only `[OFFLOAD]`/UNB. Reconcile with a repeatable matched flow before claiming stable coverage; see the [WorkBuddy handoff](workbuddy-handoff-2026-09-29.md) |
 | XG Unicom PON PPPoE to LAN | Same evidence, plus PON GEM/T-CONT mapping and optical registration | Not testable yet: no fiber |
 | Both WANs with `mwan3` | Per-flow policy/egress, hardware entries on both WANs, failover and reconnection without stale routes or leaks | Not configured yet |
 | MD standby | Vendor firmware boot and normal gateway functions; Clanker pilot only through recoverable path | Vendor 1456.62 boot/version response observed; no forwarding path or Clanker run yet |
@@ -141,9 +141,10 @@ proof. A short speed result is not a thermal or stability qualification.
   changing the PC's default route. One 3 MB IPv4 TCP download through
   XG2010G showed a matching conntrack `[HW_OFFLOAD]`, two PPE `BND`
   entries, and an approximately 3.47 MB Ethernet 6 receive delta.
-  A later 2 MB transfer was sampled as `[OFFLOAD]` with no BND entry;
-  this is evidence of at least one successful hardware-offloaded flow,
-  **not** a claim that all flows or all packets offload reliably.
+  A later 2 MB transfer was sampled as `[OFFLOAD]` with no BND entry.
+  A subsequent WorkBuddy snapshot also reported no BND under PPPoE and in
+  a non-dialing static-WAN setup. These readings conflict with the earlier
+  successful sample; treat PPPoE support and repeatability as unresolved.
 - TF now reports `lifecycle: operational`, `optical_signal: 1`, ONU
   state O5, and multicast receive traffic on `ct-iptv-mc`. TF `lan2`
   is disconnected, so neither IPTV egress nor hardware multicast
@@ -299,3 +300,16 @@ traffic endpoint, recheck temperature, then verify Clanker mailbox,
 hart/trap telemetry, PPE setup and real forwarded flows. Continue with
 TF IPTV egress and XG2010G Unicom PON only when those links are present.
 
+## WorkBuddy handoff update (2026-09-29 23:42)
+
+The latest handoff reports that the XG2010G WAN was left in a temporary
+static, non-dialing configuration and the device was offline at capture
+time. Runtime-only test addresses and nft rules disappeared after a reboot;
+the persistent WAN configuration did not. Verify current live state before
+testing, and restore normal service from the local recovery material when
+appropriate. The report's PPPoE-blocker explanation is not established: it
+conflicts with the earlier PPPoE run that recorded `[HW_OFFLOAD]` and two
+PPE `BND` entries. The report's proposed flow to an address owned by the
+router would terminate locally and is not a valid cross-port forwarding
+test. Use two distinct endpoints and correlate the same flow across route,
+conntrack, PPE bind, and verified counters. See the [full sanitized handoff](workbuddy-handoff-2026-09-29.md).

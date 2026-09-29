@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 8546)
-Total output lines: 1133
-
 /*
  * AN75XX NPU firmware - PPE and HWNAT setup
  *
@@ -377,7 +374,349 @@ static void ppe_filter_config(void)
 	if (hwnat_max_packet_2000 != 0)
 		REG32(0x1FB50514) |= 0x0FA40000;
 	else
-		REG32(0x1FB50514) |=…2546 tokens truncated…(PPE0_CTRL) & 0x8000;
+		REG32(0x1FB50514) |= 0x06A40000;
+}
+
+/* PPE0 0xE50 selector fields; bits 31:28 = 3 on the newer parts */
+static void ppe_tb_sel(u32 sel)
+{
+	u32 chip_rev = CHIP_FAMILY;
+
+	if (chip_rev == 10 || chip_rev == 12 || chip_rev == 14 ||
+	    chip_rev == 15 || chip_rev == 16) {
+		REG32(PPE0_ENABLE) = (REG32(PPE0_ENABLE) & ~0xF0u) |
+				     ((sel << 4) & 0xFF);
+		REG32(PPE0_ENABLE) = (REG32(PPE0_ENABLE) & 0xFFFF0FFF) | 0x1000;
+		if (chip_rev == 14) {
+			REG32(PPE1_ENABLE) = (REG32(PPE1_ENABLE) & ~0xF0u) |
+					     ((sel << 4) & 0xFF);
+			REG32(PPE1_ENABLE) = (REG32(PPE1_ENABLE) & 0xFFFF0FFF) |
+					     0x1000;
+		}
+	}
+	REG32(PPE0_ENABLE) = (REG32(PPE0_ENABLE) & 0xFF0FFFFF) |
+			     ((sel << 20) & 0xF00000);
+	if (chip_rev == 12 || chip_rev == 14 || chip_rev == 15 ||
+	    chip_rev == 16)
+		REG32(PPE0_ENABLE) = (REG32(PPE0_ENABLE) & 0x0FFFFFFF) |
+				     0x30000000;
+}
+
+/* Table size, bits 26:24 of the table config: 1024 << n entries. On
+ * AN7581 the table spans both PPEs' SRAM, 16384 entries, as the stock
+ * image has it; PPE1's entries are 0x2000 and up. */
+#if defined(AN7581)
+#define PPE_TB_SIZE		0x4000000
+#define PPE_TB_SIZE_PPE1	0x3000000
+#define PPE_TB_ENTRIES		0x4000
+#else
+#define PPE_TB_SIZE		0x3000000
+#define PPE_TB_SIZE_PPE1	0x2000000
+#define PPE_TB_ENTRIES		0x2000
+#endif
+
+/* Flow-table scan: turn the table walker on, tell it how many entries
+ * the chip has, and seed the hash. */
+static void ppe_enable_config(u32 sel)
+{
+	u32 chip_rev = CHIP_FAMILY;
+
+	if (chip_rev == 10 || chip_rev == 12 || chip_rev == 14 ||
+	    chip_rev == 15 || chip_rev == 16) {
+		if (chip_rev == 12 || chip_rev == 15) {
+			REG32(PPE0_ENABLE) |= 1u;
+			REG32(PPE0_ENABLE) |= 0x10000u;
+			REG32(PPE0_ENABLE) |= 0x1000000u;
+		} else {
+			REG32(PPE0_ENABLE) |= 1u;
+			REG32(PPE0_ENABLE) &= ~0x10000u;
+			if (chip_rev == 14) {
+				REG32(PPE1_ENABLE) |= 1u;
+				REG32(PPE1_ENABLE) &= ~0x10000u;
+			}
+		}
+		REG32(PPE0_ENABLE) |= 0x100u;
+		if (chip_rev == 14)
+			REG32(PPE1_ENABLE) |= 0x100u;
+
+		REG32(PPE0_MISC) = (REG32(PPE0_MISC) & 0xF8FFFFFF) |
+				   PPE_TB_SIZE;
+		if (chip_rev == 14 && (REG32(PPE1_CTRL) & 1)) {
+			REG32(PPE0_MISC) = (REG32(PPE0_MISC) & 0xF8FFFFFF) |
+					   PPE_TB_SIZE_PPE1;
+			REG32(PPE1_MISC) = (REG32(PPE1_MISC) & 0xF8FFFFFF) |
+					   PPE_TB_SIZE_PPE1;
+		}
+	}
+
+#if defined(AN7581)
+	if (chip_rev == 14 && (REG32(PPE1_CTRL) & 1)) {
+		REG32(PPE0_MISC) = (REG32(PPE0_MISC) & 0xFFFFFFF8) | 4;
+		REG32(PPE1_MISC) = (REG32(PPE1_MISC) & 0xFFFFFFF8) | 5;
+	} else {
+		REG32(PPE0_MISC) = (REG32(PPE0_MISC) & 0xFFFFFFF8) | 6;
+	}
+#else
+	REG32(PPE0_MISC) = (REG32(PPE0_MISC) & 0xFFFFFFF8) | 4;
+#endif
+	ppe_tb_sel(sel);
+	REG32(PPE0_HASH_SEED) = 0x12345678;
+	if (chip_rev == 14)
+		REG32(PPE0_HASH_SEED + PPE1_OFFSET) = 0x12345678;
+
+	if (chip_rev == 10 || chip_rev == 12 || chip_rev == 14 ||
+	    chip_rev == 15 || chip_rev == 16) {
+		REG32(PPE0_MISC) &= ~8u;
+		if (chip_rev == 14)
+			REG32(PPE1_MISC) &= ~8u;
+	} else {
+		switch (hwnat_ppe_type) {
+		case 1:
+			REG32(PPE0_MISC) |= 0x10000u;
+			break;
+		case 2:
+			REG32(PPE0_MISC) &= ~0x10000u;
+			REG32(PPE0_MISC) &= ~8u;
+			break;
+		case 3:
+			REG32(PPE0_MISC) &= ~0x10000u;
+			REG32(PPE0_MISC) |= 8u;
+			break;
+		default:
+			break;
+		}
+	}
+
+	REG32(PPE0_MISC) |= 0x30u;
+	if (chip_rev == 14)
+		REG32(PPE1_MISC) |= 0x30u;
+}
+
+/* Ageing and keepalive for bound flows. The PPE stops handing unmatched
+ * packets to the CPU once the table fills, so a flow that is never aged
+ * out is a flow the CPU never sees again. */
+static void ppe_flow_timer_config(void)
+{
+	REG32(PPE0_MISC) |= 0x80u;
+	REG32(PPE0_MISC) |= 0x100u;
+	REG32(PPE0_UNB_AGE) = (REG32(PPE0_UNB_AGE) & 0xFFFF) | 0x03E80000;
+	REG32(PPE0_UNB_AGE) = (REG32(PPE0_UNB_AGE) & 0xFFFFFF00) | 3;
+	REG32(PPE0_MISC) |= 0x200u;
+	REG32(PPE0_MISC) |= 0x400u;
+	REG32(PPE0_MISC) |= 0x800u;
+	REG32(PPE0_BND_AGE0) = (REG32(PPE0_BND_AGE0) & ~0x7FFFu) | 0x3C;
+	REG32(PPE0_BND_AGE0) = (REG32(PPE0_BND_AGE0) & ~0x7FFF0000u) | 0xF0000;
+	REG32(PPE0_BND_AGE1) = (REG32(PPE0_BND_AGE1) & ~0x7FFF0000u) | 0x50000;
+	REG32(PPE0_BND_AGE1) = (REG32(PPE0_BND_AGE1) & ~0x7FFFu) | 0x3C;
+
+	REG32(PPE0_MISC) |= 0x3000u;
+	REG32(PPE0_KA) = (REG32(PPE0_KA) & 0xFFFF0000) | 1;
+	REG32(PPE0_KA) = (REG32(PPE0_KA) & ~0xFF0000u) | 0x10000;
+	REG32(PPE0_KA) = (REG32(PPE0_KA) & ~0xFF000000u) | 0x1000000;
+	REG32(PPE0_BIND_LMT1) = (REG32(PPE0_BIND_LMT1) & ~0xFF0000u) | 0x10000;
+
+	REG32(PPE0_BIND_LMT0) = (REG32(PPE0_BIND_LMT0) & ~0x3FFFu) | 0xFA0;
+	REG32(PPE0_BIND_LMT0) = (REG32(PPE0_BIND_LMT0) & ~0x3FFF0000u) |
+				0x0FA00000;
+	REG32(PPE0_BIND_LMT1) = (REG32(PPE0_BIND_LMT1) & ~0x3FFFu) | 0x1F40;
+	REG32(PPE0_BNDR) = 30;
+	REG32(PPE0_BNDR) = (REG32(PPE0_BNDR) & 0xFFFF) | 0x001E0000;
+}
+
+static void ppe1_flow_timer_config(void)
+{
+	REG32(PPE1_MISC) |= 0x80u;
+	REG32(PPE1_MISC) |= 0x100u;
+	REG32(PPE0_UNB_AGE + PPE1_OFFSET) =
+		(REG32(PPE0_UNB_AGE + PPE1_OFFSET) & 0xFFFF) | 0x03E80000;
+	REG32(PPE0_UNB_AGE + PPE1_OFFSET) =
+		(REG32(PPE0_UNB_AGE + PPE1_OFFSET) & 0xFFFFFF00) | 3;
+	REG32(PPE1_MISC) |= 0x200u;
+	REG32(PPE1_MISC) |= 0x400u;
+	REG32(PPE1_MISC) |= 0x800u;
+	REG32(PPE0_BND_AGE0 + PPE1_OFFSET) =
+		(REG32(PPE0_BND_AGE0 + PPE1_OFFSET) & ~0x7FFFu) | 0x3C;
+	REG32(PPE0_BND_AGE0 + PPE1_OFFSET) =
+		(REG32(PPE0_BND_AGE0 + PPE1_OFFSET) & ~0x7FFF0000u) | 0xF0000;
+	REG32(PPE0_BND_AGE1 + PPE1_OFFSET) =
+		(REG32(PPE0_BND_AGE1 + PPE1_OFFSET) & ~0x7FFF0000u) | 0x50000;
+	REG32(PPE0_BND_AGE1 + PPE1_OFFSET) =
+		(REG32(PPE0_BND_AGE1 + PPE1_OFFSET) & ~0x7FFFu) | 0x3C;
+
+	REG32(PPE1_MISC) |= 0x3000u;
+	REG32(PPE0_KA + PPE1_OFFSET) =
+		(REG32(PPE0_KA + PPE1_OFFSET) & 0xFFFF0000) | 1;
+	REG32(PPE0_KA + PPE1_OFFSET) =
+		(REG32(PPE0_KA + PPE1_OFFSET) & ~0xFF0000u) | 0x10000;
+	REG32(PPE0_KA + PPE1_OFFSET) =
+		(REG32(PPE0_KA + PPE1_OFFSET) & ~0xFF000000u) | 0x1000000;
+	REG32(PPE0_BIND_LMT1 + PPE1_OFFSET) =
+		(REG32(PPE0_BIND_LMT1 + PPE1_OFFSET) & ~0xFF0000u) | 0x10000;
+
+	REG32(PPE0_BIND_LMT0 + PPE1_OFFSET) =
+		(REG32(PPE0_BIND_LMT0 + PPE1_OFFSET) & ~0x3FFFu) | 0xFA0;
+	REG32(PPE0_BIND_LMT0 + PPE1_OFFSET) =
+		(REG32(PPE0_BIND_LMT0 + PPE1_OFFSET) & ~0x3FFF0000u) |
+		0x0FA00000;
+	REG32(PPE0_BIND_LMT1 + PPE1_OFFSET) =
+		(REG32(PPE0_BIND_LMT1 + PPE1_OFFSET) & ~0x3FFFu) | 0x1F40;
+	REG32(PPE0_BNDR + PPE1_OFFSET) = 30;
+	REG32(PPE0_BNDR + PPE1_OFFSET) =
+		(REG32(PPE0_BNDR + PPE1_OFFSET) & 0xFFFF) | 0x001E0000;
+}
+
+void tunnel_init(void)
+{
+	u32 i, chip_rev;
+
+	npu_memset(tunnel_ctx, 0, sizeof(tunnel_ctx));
+
+	for (i = 0; ; i++) {
+		if (chip_cap_query(i, 0) == -1) {
+			npu_printf("unknown chipid, module load fail!\n");
+			ppe_module_idx = i;
+			break;
+		}
+		if (chip_cap_query(i, 0) != 0) {
+			ppe_module_idx = i;
+			break;
+		}
+	}
+
+	chip_cap_query(i, 2);
+	chip_cap_query(i, 3);
+	chip_cap_query(i, 4);
+	chip_cap_query(i, 5);
+
+	chip_rev = CHIP_FAMILY;
+
+	if (chip_rev == 10 || chip_rev == 12)
+		REG32(0x1FB50FF0) &= 0xFF7FF080;
+
+	if (chip_rev == 10 || chip_rev == 12 || chip_rev == 14 ||
+	    chip_rev == 15 || chip_rev == 16) {
+		REG32(PPE0_CTRL) |= 0x40u;
+		REG32(PPE0_MISC) |= 0x3000u;
+		REG32(PPE0_MISC) &= ~0x10000000u;
+		if (chip_rev == 10)
+			REG32(0x1FB50FF0) &= ~1u;
+		if (chip_rev == 14) {
+			REG32(PPE1_CTRL) |= 0x40u;
+			REG32(PPE1_MISC) |= 0x3000u;
+			REG32(PPE1_MISC) &= ~0x10000000u;
+			REG32(PPE1_MISC) |= 0x8000000u;
+		}
+	}
+
+	ppe_ip_check_init(1);
+
+	/* parser config */
+	{
+		u32 parser = 0x7D;
+
+		if (chip_rev == 10 || chip_rev == 12 || chip_rev == 14 ||
+		    chip_rev == 15 || chip_rev == 16)
+			parser = 0x7F;
+		if (chip_rev == 12 || chip_rev == 14 ||
+		    chip_rev == 15 || chip_rev == 16)
+			parser |= 0x100000;
+		parser |= 0xF00;
+		REG32(PPE0_PARSER) = parser;
+		if (chip_rev == 14)
+			REG32(PPE1_PARSER) = parser;
+
+		if (chip_rev == 10 || chip_rev == 12 || chip_rev == 14 ||
+		    chip_rev == 15 || chip_rev == 16) {
+			REG32(PPE0_PARSER) &= ~0x20000u;
+			if (chip_rev == 14)
+				REG32(PPE1_PARSER) &= ~0x20000u;
+			REG32(PPE0_PARSER) |= 0x10000u;
+			if (chip_rev == 14)
+				REG32(PPE1_PARSER) |= 0x10000u;
+			if (chip_rev == 12 || chip_rev == 14 ||
+			    chip_rev == 15 || chip_rev == 16) {
+				REG32(PPE0_PARSER) |= 0xC0000u;
+				if (chip_rev == 14)
+					REG32(PPE1_PARSER) |= 0xC0000u;
+			}
+			ppe_ethertype_init();
+		} else {
+			/* No PPE parser: the GDM does the ethertype match. */
+			u32 cfg = REG32(GDM_BASE) >> 16;
+
+			REG32(GDM_PARSE0) = 1;
+			REG32(GDM_PARSE0 + 0x04) |= 1u;
+			REG32(GDM_PARSE0 + 0x10) =
+				(REG32(GDM_PARSE0 + 0x10) & 0xFFFF0000) | 0x8100;
+			REG32(GDM_PARSE0 + 0x04) |= 2u;
+			REG32(GDM_PARSE0 + 0x10) =
+				(REG32(GDM_PARSE0 + 0x10) & 0x7757FFFF) |
+				0x88A80000;
+			if (cfg != 0x8100 && cfg != 0x88A8) {
+				REG32(GDM_PARSE0 + 0x04) |= 4u;
+				REG32(GDM_PARSE0 + 0x14) =
+					(REG32(GDM_PARSE0 + 0x14) & 0xFFFF0000) |
+					cfg;
+			}
+			if (hwnat_cds == 0) {
+				REG32(GDM_PARSE0 + 0x04) |= 8u;
+				REG32(GDM_PARSE0 + 0x14) |= 0x8000000u;
+				REG32(GDM_PARSE0 + 0x04) |= 0x10u;
+				REG32(GDM_PARSE0 + 0x18) =
+					(REG32(GDM_PARSE0 + 0x18) & 0xFFFF0000) |
+					0x86DD;
+			}
+		}
+	}
+
+	ppe_ethertype_fixup();
+	ppe_foe_pause(1);
+	ppe_filter_config();
+
+	/* GDM egress config */
+	{
+		u32 egr = REG32(PPE0_CTRL2) & 0x10000;
+		if (hwnat_ppe_type == 1)
+			egr |= 0x8000;
+		else if (hwnat_ppe_type == 3)
+			egr |= 0x6A0F7C0;
+		else
+			egr |= 0x620B0C0;
+		REG32(PPE0_CTRL2) = egr;
+		if (chip_rev == 14)
+			REG32(PPE1_CTRL2) = egr;
+	}
+
+	ppe_enable_config(0);
+
+	if (chip_rev == 11) {
+		REG32(0x1FB50EF4) = 3146112;
+		REG32(0x1FB50EF0) = 268445184;
+	}
+
+	ppe_flow_timer_config();
+	if (chip_rev == 14)
+		ppe1_flow_timer_config();
+
+	/* PPE forwarding control bits */
+	REG32(PPE0_CTRL) ^= ~(u8)REG32(PPE0_CTRL) & 2;
+	REG32(PPE0_CTRL) ^= ~(u16)REG32(PPE0_CTRL) & 0x100;
+	REG32(PPE0_CTRL) ^= ~(u16)REG32(PPE0_CTRL) & 0x200;
+	REG32(PPE0_CTRL) ^= ~(u8)REG32(PPE0_CTRL) & 0x40;
+	REG32(PPE0_CTRL) ^= ~REG32(PPE0_CTRL) & 0x1000;
+	REG32(PPE0_CTRL) &= ~0x3Cu;
+	if (chip_rev == 14) {
+		REG32(PPE1_CTRL) ^= ~(u8)REG32(PPE1_CTRL) & 2;
+		REG32(PPE1_CTRL) ^= ~(u16)REG32(PPE1_CTRL) & 0x100;
+		REG32(PPE1_CTRL) ^= ~(u16)REG32(PPE1_CTRL) & 0x200;
+		REG32(PPE1_CTRL) ^= ~(u8)REG32(PPE1_CTRL) & 0x40;
+		REG32(PPE1_CTRL) = ((~REG32(PPE1_CTRL) & 0x1000) ^
+				    REG32(PPE1_CTRL)) & 0xFFFFFFC3;
+	}
+
+	if (chip_rev == 10 || chip_rev == 12 || chip_rev == 14 ||
+	    chip_rev == 15 || chip_rev == 16) {
+		REG32(PPE0_CTRL) ^= ~REG32(PPE0_CTRL) & 0x8000;
 		if (chip_rev == 14)
 			REG32(PPE1_CTRL) ^= ~REG32(PPE1_CTRL) & 0x8000;
 	}

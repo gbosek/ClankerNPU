@@ -65,13 +65,20 @@ void mbox_isr(int src)
 		data[func_idx] = base_ptr;
 		cnt[func_idx] = (u16)max_cnt;
 	} else {
-		/* callback path: dispatch to handler */
-		u32 *callbacks = (u32 *)&mbox_dispatch[mbox_idx][48];
+		/* callback table contains eight pointers, while the mailbox field
+		 * can encode sixteen slots. Reject out-of-range IDs before lookup;
+		 * otherwise an invalid slot could read into the next dispatch row.
+		 */
+		if (func_idx < 8) {
+			u32 *callbacks = (u32 *)&mbox_dispatch[mbox_idx][48];
 
-		handler = (mbox_handler_t)(void *)callbacks[func_idx];
-		if (handler) {
-			ret = (u32)handler(base_ptr, max_cnt);
-			rptr = (rptr & 0xFFFFFFE3u) | ((ret & 7) << 2);
+			handler = (mbox_handler_t)(void *)callbacks[func_idx];
+			if (handler) {
+				ret = (u32)handler(base_ptr, max_cnt);
+				rptr = (rptr & 0xFFFFFFE3u) | ((ret & 7) << 2);
+			}
+		} else {
+			npu_printf("invalid mailbox callback slot=%d\n", func_idx);
 		}
 
 		ndbg->hart[core].mails++;
@@ -187,3 +194,4 @@ int mbox_notify_host(u32 core_id, u32 func_id, u32 len)
 	hw_mutex_unlock_pri(mbox_notify_mutex);
 	return (sts & 2) ? (sts >> 2) & 7 : 0;
 }
+

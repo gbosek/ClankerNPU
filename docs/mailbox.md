@@ -46,6 +46,15 @@ flowchart TD
 `mailbox_init` (core 0, at boot) routes queue n to core n, registers
 `mbox_isr` on sources 8..8+N-1 and fills the handler slots.
 
+The wire field can encode 16 function slots, but the callback table contains
+only 8 pointers. ClankerNPU rejects callback IDs 8..15 before indexing the
+table and returns the normal mailbox failure status; raw-data slots retain
+their separate 0..15 range. In the inspected Linux `airoha_npu.c` host driver,
+`airoha_npu_send_msg()` is called for WiFi slot 0 and PPE slot 5. Slots 1..4
+being declared or implemented in firmware is not evidence that this host
+driver exercises those ABIs; they remain outside the current runtime-coverage
+claim.
+
 ## Function slots
 
 | core | slot | handler | built when |
@@ -183,3 +192,4 @@ in [tunnel.md](tunnel.md#ppe-and-hwnat).
 ## DBA commands (core 5, slot 3)
 
 Function type 1 sets, 3 gets. See [dba.md](dba.md#host-commands).
+

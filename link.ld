@@ -73,3 +73,28 @@ __stack4 = __stack_base + 5 * __STACK_SIZE;
 __stack5 = __stack_base + 6 * __STACK_SIZE;
 __stack6 = __stack_base + 7 * __STACK_SIZE;
 __stack7 = __stack_base + 8 * __STACK_SIZE;
+
+/*
+ * FOE flow-stats window published to the Linux host by the
+ * FLOW_STATS_SETUP mailbox call (PPE function 4).
+ *
+ * The host ioremaps this window and both writes it (memset_io on flow
+ * commit) and reads it (memcpy_fromio when reporting per-entry counters),
+ * so it has to be DRAM the host can map. It sits in the SoC-reserved NPU
+ * DRAM window (npu-binary@84000000, 10 MiB) well above .text, .rodata and
+ * the eight 16 KB hart stacks, which all live just after 0x84000000.
+ *
+ * 64 KiB = 8192 entries x 8 bytes, matching the host's
+ * PPE_STATS_NUM_ENTRIES (4 K) * num_ppe (2) * sizeof(struct airoha_foe_stats).
+ *
+ * The firmware reads both values back through NPU_FOE_STATS_ADDR /
+ * NPU_FOE_STATS_SIZE in npu_internal.h, so these two symbols are the single
+ * source of truth and the ASSERTs below guard them at link time.
+ */
+__npu_stats_base = 0x84900000;
+__npu_stats_size = 0x10000;
+
+ASSERT(__stack_base + 8 * __STACK_SIZE <= __npu_stats_base,
+       "firmware image or stacks overlap the FOE stats window")
+ASSERT(__npu_stats_base + __npu_stats_size <= 0x84A00000,
+       "FOE stats window leaves the reserved NPU DRAM")

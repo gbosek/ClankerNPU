@@ -1,0 +1,87 @@
+name: Build AN7581 NOWIFI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - an7581-nowifi-profile
+    paths:
+      - 'Makefile'
+      - 'npu_config.h'
+      - 'npu_*.c'
+      - 'npu_*.h'
+      - 'crt0.S'
+      - 'link.ld'
+      - 'docs/an7581-nowifi.md'
+      - '.github/workflows/build-an7581-nowifi.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RISC-V bare-metal toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
+
+      - name: Build generic AN7581 no-WiFi profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          make clean
+          make an7581-nowifi
+          test -s build/AN7581_NOWIFI/npu_rv32.bin
+          test -s build/AN7581_NOWIFI/npu_data.bin
+          make SOC=AN7581 WIFI=NOWIFI disasm
+          riscv64-unknown-elf-size build/AN7581_NOWIFI/firmware.elf
+          riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf > build/AN7581_NOWIFI/symbols.txt
+          stats_base="$(awk '$3 == "__npu_stats_base" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          stats_size="$(awk '$3 == "__npu_stats_size" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          test "$stats_base" = "84900000"
+          test "$stats_size" = "00010000"
+          grep -E ' [Tt] core7_main$' build/AN7581_NOWIFI/symbols.txt
+          grep -E ' [Tt] nowifi_mail_dispatch$' build/AN7581_NOWIFI/symbols.txt
+          grep -E ' [Tt] hwnat_mail_dispatch$' build/AN7581_NOWIFI/symbols.txt
+          grep -E ' [BD] npu_flow_stats_setup$' build/AN7581_NOWIFI/symbols.txt
+          strings build/AN7581_NOWIFI/npu_rv32.bin > build/AN7581_NOWIFI/strings.txt
+          grep -q 'producer_registered' build/AN7581_NOWIFI/strings.txt
+
+      - name: Verify generic profile wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'AN7581_NOWIFI' Makefile
+          grep -q 'HAS_AN7581_NOWIFI' npu_config.h
+          grep -q 'AN7581_NOWIFI' README.md
+          grep -q 'AN7581_NOWIFI' docs/an7581-nowifi.md
+
+      - name: Rebuild final artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          make clean
+          make an7581-nowifi
+          riscv64-unknown-elf-nm build/AN7581_NOWIFI/firmware.elf > build/AN7581_NOWIFI/symbols.txt
+          stats_base="$(awk '$3 == "__npu_stats_base" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          stats_size="$(awk '$3 == "__npu_stats_size" { print $1 }' build/AN7581_NOWIFI/symbols.txt)"
+          test "$stats_base" = "84900000"
+          test "$stats_size" = "00010000"
+          strings build/AN7581_NOWIFI/npu_rv32.bin > build/AN7581_NOWIFI/strings.txt
+          grep -q 'producer_registered' build/AN7581_NOWIFI/strings.txt
+          sha256sum             build/AN7581_NOWIFI/npu_rv32.bin             build/AN7581_NOWIFI/npu_data.bin             > build/AN7581_NOWIFI/SHA256SUMS
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClankerNPU-AN7581-NOWIFI
+          path: |
+            build/AN7581_NOWIFI/npu_rv32.bin
+            build/AN7581_NOWIFI/npu_data.bin
+            build/AN7581_NOWIFI/firmware.elf
+            build/AN7581_NOWIFI/firmware.map
+            build/AN7581_NOWIFI/SHA256SUMS
+            build/AN7581_NOWIFI/symbols.txt
+            build/AN7581_NOWIFI/strings.txt
+          retention-days: 7

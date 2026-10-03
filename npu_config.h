@@ -1,7 +1,7 @@
 #ifndef NPU_CONFIG_H
 #define NPU_CONFIG_H
 
-/* Boot version line: release.wifi chip.git hash */
+/* Boot version line: release.wifi.git hash */
 #define NPU_INIT_VERSION    "TLB7.8.0.0_v003"
 #define NPU_VERSION	NPU_INIT_VERSION "." NPU_WIFI_NAME "." NPU_GIT_REV
 
@@ -9,7 +9,6 @@
  * Build-time variant selection.
  * Define exactly one SoC: AN7552, AN7581, AN7583
  * Define exactly one WiFi chip (or NOWIFI): MT7916, MT7991, MT7992, MT7993, MT7996, NOWIFI
- *
  * SoC → core count:
  *   AN7552 → 2 cores
  *   AN7581 → 8 cores
@@ -49,6 +48,16 @@
 /* no WiFi offload */
 #else
 #error "Define one WiFi chip: MT7916, MT7991, MT7992, MT7993, MT7996, or NOWIFI"
+#endif
+
+#if defined(AN7581) && defined(NOWIFI)
+#define HAS_AN7581_NOWIFI
+/*
+ * Generic AN7581 build for platforms that do not use the NPU WiFi datapath.
+ * Keep board-specific Ethernet/PON topology in the host driver and runtime
+ * HWNAT mailbox configuration. This flag is only an extension point for
+ * AN7581-wide telemetry or optimizations that are safe across boards.
+ */
 #endif
 
 #if defined(AN7583) && !defined(NOWIFI)

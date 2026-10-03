@@ -60,7 +60,7 @@ OBJS    := $(patsubst %.S,$(BUILD)/%.o,$(SRCS_S)) \
            $(patsubst %.c,$(BUILD)/%.o,$(SRCS_C))
 FLAGS   := $(BUILD)/.flags
 
-.PHONY: all clean disasm
+.PHONY: all clean disasm an7581-nowifi
 
 all: $(BIN) $(DATA)
 
@@ -94,9 +94,15 @@ disasm: $(ELF)
 clean:
 	rm -rf build/
 
-# Build all 11 variants
+# First-class no-WiFi build for wired/PON AN7581 platforms.
+# This is intentionally SoC-wide: board-specific WAN/PON topology stays in
+# the host driver and in the runtime HWNAT mailbox parameters.
+an7581-nowifi:
+	$(MAKE) SOC=AN7581 WIFI=NOWIFI
+
+# Build all supported variants, including AN7581 without NPU WiFi offload.
 VARIANTS := AN7552_MT7916 AN7552_MT7991 AN7552_MT7993 \
-            AN7581_MT7916 AN7581_MT7992 AN7581_MT7996 \
+            AN7581_MT7916 AN7581_MT7992 AN7581_MT7996 AN7581_NOWIFI \
             AN7583_MT7916 AN7583_MT7992 AN7583_MT7993 \
             AN7583_MT7996 AN7583_NOWIFI
 

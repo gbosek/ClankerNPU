@@ -65,13 +65,20 @@ void mbox_isr(int src)
 		data[func_idx] = base_ptr;
 		cnt[func_idx] = (u16)max_cnt;
 	} else {
-		/* callback path: dispatch to handler */
-		u32 *callbacks = (u32 *)&mbox_dispatch[mbox_idx][48];
+		/* callback table contains eight pointers, while the mailbox field
+		 * can encode sixteen slots. Reject out-of-range IDs before lookup;
+		 * otherwise an invalid slot could read into the next dispatch row.
+		 */
+		if (func_idx < 8) {
+			u32 *callbacks = (u32 *)&mbox_dispatch[mbox_idx][48];
 
-		handler = (mbox_handler_t)(void *)callbacks[func_idx];
-		if (handler) {
-			ret = (u32)handler(base_ptr, max_cnt);
-			rptr = (rptr & 0xFFFFFFE3u) | ((ret & 7) << 2);
+			handler = (mbox_handler_t)(void *)callbacks[func_idx];
+			if (handler) {
+				ret = (u32)handler(base_ptr, max_cnt);
+				rptr = (rptr & 0xFFFFFFE3u) | ((ret & 7) << 2);
+			}
+		} else {
+			npu_printf("invalid mailbox callback slot=%d\n", func_idx);
 		}
 
 		ndbg->hart[core].mails++;
@@ -86,6 +93,28 @@ void mbox_isr(int src)
 			mbox_notify_host(core, func_idx, ret);
 	}
 }
+
+#ifdef HAS_AN7581_NOWIFI
+/* The Linux host probes the firmware version through WiFi mailbox slot 0
+ * even on wired-only boards. Keep this one control-plane query available;
+ * it does not initialize or enable the WiFi datapath.
+ */
+static int nowifi_mail_dispatch(u32 base, u32 cnt)
+{
+	u32 *msg = (u32 *)((base & 0x3FFFFFFF) | NPU_ADDR_MASK);
+
+	/* wlan_mbox_data: ifindex/type, function id, then a u32 reply. */
+	if (cnt < 3 * sizeof(u32) || (msg[0] & 0xf) != 0 ||
+	    ((msg[0] >> 4) & 0xf) != 3 || msg[1] != 10)
+		return 0;
+
+	/* NPU_INIT_VERSION is TLB7.8...; this is the host's packed
+	 * major.minor version field, not a claim of vendor ABI equivalence.
+	 */
+	msg[2] = (7u << 16) | 8u;
+	return 1;
+}
+#endif
 
 void mailbox_init(void)
 {
@@ -112,7 +141,9 @@ void mailbox_init(void)
 
 	/* register handlers into core 0's callback slots */
 	callbacks = (u32 *)&mbox_dispatch[0][48];
-#ifdef HAS_WIFI
+#ifdef HAS_AN7581_NOWIFI
+	callbacks[0] = (u32)(void *)nowifi_mail_dispatch;
+#elif defined(HAS_WIFI)
 	callbacks[0] = (u32)(void *)wifi_mail_dispatch;
 #endif
 	callbacks[1] = (u32)(void *)tunnel_mail_dispatch;
@@ -163,3 +194,4 @@ int mbox_notify_host(u32 core_id, u32 func_id, u32 len)
 	hw_mutex_unlock_pri(mbox_notify_mutex);
 	return (sts & 2) ? (sts >> 2) & 7 : 0;
 }
+

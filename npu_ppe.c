@@ -909,6 +909,101 @@ static int sram_set_entry_to_zero(u32 size)
 	return 1;
 }
 
+/*
+ * FLOW_STATS_SETUP (PPE mailbox function 4).
+ *
+ * The Linux host calls this from airoha_npu_ppe_stats_setup() while
+ * airoha_ppe_offload_setup() runs, but only when the host kernel was built
+ * with CONFIG_NET_AIROHA_FLOW_STATS=y. That call is fatal on error:
+ *
+ *     ppe_num_stats_entries = airoha_ppe_get_total_num_stats_entries(ppe);
+ *     if (ppe_num_stats_entries > 0) {
+ *             err = npu->ops.ppe_init_stats(npu, ppe->foe_stats_dma, ...);
+ *             if (err)
+ *                     goto error_npu_put;   -> eth->npu stays NULL
+ *     }
+ *
+ * so answering failure here means the PPE never binds to the NPU and no
+ * flow is ever offloaded. The host sends this function only when
+ * CONFIG_NET_AIROHA_FLOW_STATS=y; target config fragments may explicitly
+ * disable it, in which case this setup callback is not reached.
+ *
+ * Message layout (struct ppe_mbox_data, 28 bytes, see airoha_npu.c):
+ *     +0  func_type                NPU_OP_SET (1)
+ *     +4  func_id                  PPE_FUNC_SET_WAIT_FLOW_STATS_SETUP (4)
+ *     +8  stats_info.npu_stats_addr   <-- we fill this in
+ *     +12 stats_info.foe_stats_addr   <-- host-provided
+ *
+ * The host then does:
+ *     npu->stats = devm_ioremap(dev, npu_stats_addr,
+ *                               num_stats_entries * sizeof(struct airoha_foe_stats));
+ * and uses that mapping two ways:
+ *     airoha_ppe_foe_flow_stat_entry_reset() -> memset_io(&npu->stats[i], 0, 8)
+ *     airoha_ppe_foe_entry_get_stats()       -> memcpy_fromio(&s, &npu->stats[i], 8)
+ *
+ * The host assembles a 64-bit counter from two halves: it reads the high
+ * 32 bits from its coherent buffer at foe_stats_addr and the low 32 bits
+ * from this window:
+ *     stats.packets = ppe->foe_stats[i].packets << 32 | npu_stats.packets;
+ * This describes the host's read path, not the producer of either half.
+ * The producer and update semantics still need to be verified against the
+ * firmware/hardware path on a board.
+ *
+ * So the window must be real DRAM the host can both write and read; handing
+ * back a fake address would have the host memset_io/memcpy_fromio somewhere
+ * unrelated and report garbage counters.
+ *
+ * What this version does and does not do:
+ *   - publishes a reserved, zeroed window inside the NPU's own DRAM
+ *     (NPU_FOE_STATS_ADDR, see link.ld) and records the host buffer address
+ *     plus window metadata for NDBG inspection
+ *   - it does NOT yet update the low 32-bit words or configure a producer
+ *     for the host-side DMA buffer. Linux zeroes both buffers when resetting
+ *     a flow; subsequent counter values remain unverified.
+ *   - deliberately does not return a fabricated address or a fake buffer
+ *     just to make the initialisation pass.
+ *
+ * The shared debug block records the setup state and the mailbox dispatcher
+ * records every call:
+ *     NC_PPE_LAST = func_id << 8 | result   ->  0x0401 on success
+ *     NDBG symbol FSTA -> npu_flow_stats_setup
+ *     NDBG_TRACE(NDBG_PPE, 4, 1, published_window_address)
+ */
+volatile struct npu_flow_stats_setup_state npu_flow_stats_setup;
+
+static int hwnat_set_wait_flow_stats(u32 addr)
+{
+	u32 foe_addr = REG32(addr + 12);
+	u32 i, words = NPU_FOE_STATS_SIZE / 4;
+
+	npu_flow_stats_setup.setup_complete = 0;
+	npu_flow_stats_setup.counter_producer_registered = 0;
+	npu_flow_stats_setup.host_dma_addr = foe_addr;
+	npu_flow_stats_setup.npu_window_addr = NPU_FOE_STATS_ADDR;
+	npu_flow_stats_setup.npu_window_bytes = NPU_FOE_STATS_SIZE;
+	npu_flow_stats_setup.npu_window_capacity = NPU_FOE_STATS_SIZE / 8;
+	npu_barrier();
+
+	/* Publish the window the host will ioremap. */
+	REG32(addr + 8) = NPU_FOE_STATS_ADDR;
+
+	/*
+	 * Define the initial contents. The host resets individual entries on
+	 * flow commit, but a first read before any commit would otherwise see
+	 * whatever DRAM held at boot. DRAM 0x84000000..0x849FFFFF is already
+	 * inside the 0x8xxxxxxx view the hardware sees, so no alias
+	 * translation is needed here.
+	 */
+	for (i = 0; i < words; i++)
+		REG32(NPU_FOE_STATS_ADDR + (i << 2)) = 0;
+	npu_barrier();
+
+	/* Publish last: this means setup completed, not that counters are live. */
+	npu_flow_stats_setup.setup_complete = 1;
+	npu_barrier();
+	return 1;
+}
+
 /* HWNAT_API: _hwnat_set_func_id at +8, data_size +12, data +16 */
 static int hwnat_set_wait_api(u32 addr)
 {
@@ -939,21 +1034,31 @@ static int hwnat_set_wait_api(u32 addr)
 	return 1;
 }
 
+enum {
+	PPE_MBOX_HEADER_SIZE = 2 * sizeof(u32),
+	PPE_MBOX_INIT_SIZE = 28,
+	PPE_MBOX_API_SIZE = 5 * sizeof(u32),
+	PPE_MBOX_STATS_SIZE = 4 * sizeof(u32),
+};
+
 int hwnat_mail_dispatch(u32 base, u32 cnt)
 {
 	u32 addr = (base & 0x3FFFFFFF) | NPU_ADDR_MASK;
-	u32 func_type = *(volatile u32 *)addr;
-	u32 func_id;
+	u32 func_type, func_id, required_len, trace_arg;
 	int result;
 
-	(void)cnt;
-	if (func_type != 1) {
-		u32 i;
+	/* CTRL1 carries the payload length in bytes. Do not inspect a header
+	 * unless both header words are present and DWORD-aligned.
+	 */
+	if (cnt < PPE_MBOX_HEADER_SIZE || (cnt & (sizeof(u32) - 1))) {
+		npu_printf("invalid PPE mailbox header length=%u\n", cnt);
+		return 0;
+	}
 
-		npu_printf("not support unknow funcType\n");
-		for (i = 0; i < 7; i++)
-			npu_printf("Offset: %08zx, Value: 0x%08x\n",
-				   i * 4, *(volatile u32 *)(addr + i * 4));
+	func_type = *(volatile u32 *)addr;
+	if (func_type != 1) {
+		npu_printf("unsupported PPE funcType=%u len=%u\n",
+			   func_type, cnt);
 		return 0;
 	}
 
@@ -961,6 +1066,36 @@ int hwnat_mail_dispatch(u32 base, u32 cnt)
 	if (func_id < 1 || func_id > 5) {
 		npu_printf("Error: invalid funcId! hwnat_mail_data->funcType=%u hwnat_mail_data->funcId=%u\n",
 			   func_type, func_id);
+		return 0;
+	}
+
+	/* The current Linux host sends sizeof(struct ppe_mbox_data) == 28
+	 * bytes for every operation. Keep the checks tied to the fields each
+	 * handler actually accesses, so short or malformed messages fail closed.
+	 */
+	switch (func_id) {
+	case 1: /* HWNAT_INIT reads through +24 */
+		required_len = PPE_MBOX_INIT_SIZE;
+		break;
+	case 2: /* HWNAT_DEINIT only consumes the two-word header */
+	case 5: /* legacy L4S acknowledgement only consumes the header */
+		required_len = PPE_MBOX_HEADER_SIZE;
+		break;
+	case 3: /* API reads data through +16 */
+		required_len = PPE_MBOX_API_SIZE;
+		break;
+	case 4: /* FLOW_STATS_SETUP reads the address at +12 */
+		required_len = PPE_MBOX_STATS_SIZE;
+		break;
+	default:
+		return 0;
+	}
+	if (cnt < required_len) {
+		npu_printf("short PPE mailbox: funcId=%u len=%u need=%u\n",
+			   func_id, cnt, required_len);
+		NDBG_CNT(NC_PPE_MAILS);
+		NDBG_SET(NC_PPE_LAST, func_id << 8);
+		NDBG_TRACE(NDBG_PPE, func_id, 0, cnt);
 		return 0;
 	}
 
@@ -976,8 +1111,8 @@ int hwnat_mail_dispatch(u32 base, u32 cnt)
 	case 3:			/* API */
 		result = hwnat_set_wait_api(addr);
 		break;
-	case 4:			/* FLOW_STATS_SETUP, not implemented */
-		result = 0;
+	case 4:			/* FLOW_STATS_SETUP */
+		result = hwnat_set_wait_flow_stats(addr);
 		break;
 	default:		/* L4S_SETUP */
 		npu_printf("L4S not support!!!\n");
@@ -985,9 +1120,11 @@ int hwnat_mail_dispatch(u32 base, u32 cnt)
 		break;
 	}
 
+	trace_arg = cnt >= 3 * sizeof(u32) ?
+		*(volatile u32 *)(addr + 8) : 0;
 	NDBG_CNT(NC_PPE_MAILS);
 	NDBG_SET(NC_PPE_LAST, func_id << 8 | (result & 0xFF));
-	NDBG_TRACE(NDBG_PPE, func_id, result, *(volatile u32 *)(addr + 8));
+	NDBG_TRACE(NDBG_PPE, func_id, result, trace_arg);
 	if (result == 0)
 		npu_printf("hwnat_mail_set_wait_operation fail !\n");
 	return result;

@@ -11,7 +11,7 @@ scheduling from the ARM host.
 | SoC | Harts | SRAM | WiFi chips | Extra features |
 |---|---:|---:|---|---|
 | AN7552 | 2 | 256 KB | MT7916, MT7991, MT7993 | none |
-| AN7581 | 8 | 480 KB | MT7916, MT7992, MT7996 | tunnel offload, TR-471 |
+| AN7581 | 8 | 480 KB | MT7916, MT7992, MT7996, none | tunnel offload, TR-471; generic no-WiFi profile |
 | AN7583 | 6 | 512 KB | MT7916, MT7992, MT7993, MT7996, none | tunnel offload, GPON DBA |
 
 MT7916 and MT7996 use the **kite** datapath; MT7991, MT7992 and MT7993
@@ -98,7 +98,8 @@ Requires `riscv64-unknown-elf-gcc` (tested with GCC 14.2).
 
 ```sh
 make SOC=AN7583 WIFI=MT7993        # one variant
-make all-variants                  # all 11 variants
+make an7581-nowifi                  # AN7581 without NPU WiFi offload
+make all-variants                  # all variants, including AN7581_NOWIFI
 make SOC=AN7583 WIFI=MT7993 disasm # build/<variant>/firmware.dis
 ```
 
@@ -114,7 +115,11 @@ make SOC=AN7583 WIFI=MT7993 disasm # build/<variant>/firmware.dis
 | `GITREV` | `git describe` | hash in the boot `NPU Version` line |
 | `CROSS` | `riscv64-unknown-elf-` | toolchain prefix |
 
-Outputs in `build/<SOC>_<WIFI>/`:
+Outputs remain in `build/<SOC>_<WIFI>/`. The generic AN7581 no-WiFi image is written to `build/AN7581_NOWIFI/`.
+
+The `AN7581_NOWIFI` variant is intentionally board-neutral. It keeps the existing AN7581 PPE/HWNAT/tunnel behavior and disables only the NPU WiFi datapath. Ethernet/PON topology, WAN selection and bearer mapping remain host-driver/runtime responsibilities rather than being hard-coded for a particular product. See [docs/an7581-nowifi.md](docs/an7581-nowifi.md), the [project charter](docs/an7581-project-charter.md), and the [three-board compatibility matrix](docs/compatibility-matrix.md).
+
+Outputs:
 
 | file | content |
 |---|---|
@@ -164,6 +169,7 @@ Feature flags from `npu_config.h`:
 | `WIFI_EAGLE` | MT7991, MT7992, MT7993 |
 | `HAS_WIFI` | any WiFi chip |
 | `HAS_TUNNEL` | AN7581, AN7583 |
+| `HAS_AN7581_NOWIFI` | AN7581 without NPU WiFi offload; extension point for SoC-wide telemetry/optimizations |
 | `HAS_TR471` | AN7581 with WiFi |
 | `HAS_DBA` | AN7583 with WiFi |
 | `HAS_BME` | AN7552, AN7583 with WiFi (TDMA path) |
@@ -194,3 +200,5 @@ Feature flags from `npu_config.h`:
 | [docs/dba.md](docs/dba.md) | GPON dynamic bandwidth allocation |
 | [docs/debug.md](docs/debug.md) | field debug block: layout, commands, traces, troubleshooting flow and FAQ |
 | [docs/errata.md](docs/errata.md) | vendor firmware defects and how this firmware handles them |
+| [docs/an7581-deployment-validation.md](docs/an7581-deployment-validation.md) | three-board topology, live test evidence, deployment gates and work log |
+| [docs/workbuddy-handoff-2026-09-29.md](docs/workbuddy-handoff-2026-09-29.md) | WorkBuddy-to-Codex handoff, PPPoE offload evidence conflict, and corrected test requirements |

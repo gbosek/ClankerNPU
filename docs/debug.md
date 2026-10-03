@@ -116,11 +116,43 @@ file. Convert the address to host view before reading it.
 | `BRDG` | variable holding the NPU bridge buffer address |
 | `TUNF` | tunnel mail handler table |
 | `L4SE` | L4S enable flag |
+| `FOES` | NPU-side FOE flow-statistics window returned by `FLOW_STATS_SETUP` |
+| `FSTA` | `struct npu_flow_stats_setup_state`: handshake and mapped-window metadata |
 | `EDBG` | eagle datapath counters, `struct eagle_dbg` in `npu_wifi.h` |
 | `SQLM` | eagle per-station queue limit, `struct wifi_sta_q`: limit, target, interval, the two drop counts, then delay, min_q and small ([sta-qlimit.md](sta-qlimit.md#settings)) |
 | `KFLG` | kite debug flags: bit 2 turns the kite counter blocks on |
 | `KC2G`, `KC5G` | variables holding the kite 2.4 GHz and 5 GHz counter block addresses |
 | `PROF` | profile block, `PROF=1` builds only ([Profiling](#profiling)) |
+
+For PPE status (`NDBG_PPE`), the text status also prints the flow-statistics
+setup flag, counter-producer registration flag, host DMA address, NPU window
+address/size, and window capacity.
+`setup_complete=1` means only that the firmware accepted the mailbox request,
+zeroed the NPU window, and returned its address. It does **not** mean that
+either counter half is being updated or that flow-statistics values are valid.
+`counter_producer_registered=0` explicitly reports that this firmware has no
+verified per-flow counter producer; do not treat the host-visible counters as
+live traffic statistics.
+
+The PBS05 Airoha host debugfs snapshot has `ppe0_enabled` and
+`ppe1_enabled` fields, each obtained from the same `airoha_ppe_is_enabled()`
+helper used by the driver. These are engine-enable state only. They do not
+identify which PPE owns a flow or prove that a flow traversed that PPE; use
+engine-attributed FOE evidence or separate hit counters for that claim. The
+updated debugfs fields are compiled into the local 040GMD initramfs test FIT,
+but that FIT has not been booted on hardware.
+
+The `FSTA` object is six 32-bit words. The new field is appended so the
+existing five offsets remain unchanged:
+
+| offset | field |
+|---:|---|
+| `+0x00` | `setup_complete` (`1` means the setup handler completed) |
+| `+0x04` | `host_dma_addr` supplied by Linux |
+| `+0x08` | `npu_window_addr` returned to Linux |
+| `+0x0C` | `npu_window_bytes` cleared by the handler |
+| `+0x10` | `npu_window_capacity` in 8-byte entries |
+| `+0x14` | `counter_producer_registered` (`0` in the current firmware) |
 
 ### Counters
 
@@ -534,3 +566,4 @@ the top three bits for `sys memory`.
 **How do I read memory the host cannot map?**
 `COPY` with the NPU address and a length, then
 `sys memory 1e907400 <length>`. For one word, `READ`.
+
